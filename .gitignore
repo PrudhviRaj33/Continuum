@@ -2,6 +2,8 @@ node_modules/
 dist/
 knowledge.db
 knowledge.db-journal
+knowledge.db-wal
+knowledge.db-shm
 .env
 *.db-journal
 coverage/
