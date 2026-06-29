@@ -1,8 +1,14 @@
 {
-  "name": "continuum",
+  "name": "continuum-ai-mcp",
   "version": "1.0.0",
   "description": "AI Development Memory Layer — Universal Language Support MCP Server",
   "main": "dist/mcp/McpServer.js",
+  "files": [
+    "dist"
+  ],
+  "bin": {
+    "continuum": "dist/cli/index.js"
+  },
   "keywords": ["mcp", "ai", "developer-tools", "code-analysis", "sqlite"],
   "author": "Prudhvi Gandrothu",
   "license": "MIT",

@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "continuum": {
+      "command": "npx",
+      "args": [
+        "continuum",
+        "start"
+      ],
+      "env": {
+        "WATCH_PATHS": "${workspaceFolder}/src",
+        "DB_PATH": "${workspaceFolder}/knowledge.db",
+        "LOG_LEVEL": "info"
+      }
+    }
+  }
+}

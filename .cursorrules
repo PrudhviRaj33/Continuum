@@ -1,0 +1,3 @@
+You have access to the Continuum MCP tools.
+Always call `get_session` when you first start working or if you lose context.
+Use `save_task` to proactively save goals, decisions, and next steps before closing sessions.
