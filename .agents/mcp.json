@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "continuum": {
+      "command": "node",
+      "args": ["dist/mcp/McpServer.js"],
+      "env": {
+        "WATCH_PATHS": "./src",
+        "DB_PATH": "./knowledge.db",
+        "LOG_LEVEL": "info"
+      }
+    }
+  }
+}

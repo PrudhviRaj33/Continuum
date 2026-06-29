@@ -1,0 +1,48 @@
+{
+  "name": "continuum",
+  "version": "1.0.0",
+  "description": "AI Development Memory Layer — Universal Language Support MCP Server",
+  "main": "dist/mcp/McpServer.js",
+  "keywords": ["mcp", "ai", "developer-tools", "code-analysis", "sqlite"],
+  "author": "Prudhvi Gandrothu",
+  "license": "MIT",
+  "scripts": {
+    "dev": "tsx src/mcp/McpServer.ts",
+    "build": "NODE_OPTIONS=--max-old-space-size=4096 tsc && mkdir -p dist/database && cp src/database/schema.sql dist/database/",
+    "start": "node dist/mcp/McpServer.js",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.3",
+    "better-sqlite3": "^9.4.3",
+    "chokidar": "^3.6.0",
+    "dotenv": "^16.4.5",
+    "mssql": "^11.0.1",
+    "mysql2": "^3.9.7",
+    "pg": "^8.11.5",
+    "pino": "^9.2.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.10",
+    "@types/mssql": "^9.1.5",
+    "@types/node": "^22.2.0",
+    "@types/pg": "^8.11.6",
+    "@typescript-eslint/eslint-plugin": "^8.1.0",
+    "@typescript-eslint/parser": "^8.1.0",
+    "@vitest/coverage-v8": "^2.0.5",
+    "eslint": "^9.9.0",
+    "pino-pretty": "^13.0.0",
+    "prettier": "^3.3.3",
+    "tsx": "^4.17.0",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  }
+}

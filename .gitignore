@@ -1,0 +1,9 @@
+node_modules/
+dist/
+knowledge.db
+knowledge.db-journal
+.env
+*.db-journal
+coverage/
+*.log
+.DS_Store

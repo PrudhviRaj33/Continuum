@@ -1,0 +1,32 @@
+version: '3.9'
+
+services:
+  continuum:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    image: continuum:latest
+    container_name: continuum
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - LOG_LEVEL=info
+      - DB_PATH=/data/knowledge.db
+      - WATCH_PATHS=/workspace/src
+      # Uncomment and set your DB if using get_schema tool:
+      # - DB_TYPE=postgres
+      # - PG_HOST=postgres
+      # - PG_PORT=5432
+      # - PG_DATABASE=myapp
+      # - PG_USER=myuser
+      # - PG_PASSWORD=mypassword
+    volumes:
+      - continuum-data:/data
+      - ${WORKSPACE_PATH:-../}:/workspace:ro  # mount your project read-only
+    stdin_open: true
+    tty: true
+
+volumes:
+  continuum-data:
+    driver: local
