@@ -288,3 +288,79 @@ registerLanguage({
     { kind: 'function', pattern: /^###\s+(.+)$/ },
   ],
 });
+
+// ── Angular / Web ─────────────────────────────────────────────────────────────
+
+registerLanguage({
+  name: 'html',
+  displayName: 'HTML / Angular Template',
+  extensions: ['.html', '.htm'],
+  commentPrefixes: ['<!--'],
+  rules: [
+    // Custom elements and Angular component selectors (must contain a hyphen)
+    // Matches: <app-header, <mat-button, <my-dialog, <router-outlet
+    {
+      kind: 'class',
+      pattern: /^[ \t]*<([a-z][a-z0-9]*(?:-[a-z0-9]+)+)[\s\/>]/,
+    },
+    // Named ng-template blocks: <ng-template #myTemplate>
+    // Must come after custom-element rule would normally fire, but ng-template
+    // is already caught above — this catches the #name on the same line
+    {
+      kind: 'interface',
+      pattern: /^[ \t]*<ng-template\b[^>]*#([A-Za-z][A-Za-z0-9_]*)/,
+    },
+    // Template reference variables: <input #emailInput> or attribute on its own line
+    // Only fires when line is an attribute line (not a tag opening — those match rule 1)
+    {
+      kind: 'property',
+      pattern: /[\s\(]#([A-Za-z][A-Za-z0-9_]*)[\s>=]/,
+    },
+  ],
+});
+
+registerLanguage({
+  name: 'css',
+  displayName: 'CSS',
+  extensions: ['.css'],
+  commentPrefixes: ['/*', ' *', '*/'],
+  rules: [
+    // @keyframes: @keyframes fadeIn {
+    { kind: 'function', pattern: /^@keyframes\s+([A-Za-z][A-Za-z0-9_-]*)/ },
+    // @layer: @layer utilities {
+    { kind: 'module', pattern: /^@layer\s+([A-Za-z][A-Za-z0-9_.-]*)/ },
+    // CSS custom properties (design tokens): --color-primary: #007bff;
+    { kind: 'property', pattern: /^[ \t]*--([A-Za-z][A-Za-z0-9_-]*)\s*:/ },
+    // Class selectors: .primary-button { or .card:hover { or indented .nested {
+    { kind: 'class', pattern: /^[ \t]*\.([A-Za-z][A-Za-z0-9_-]*)[\s{,:>#\[]/ },
+    // ID selectors: #hero-section {
+    { kind: 'property', pattern: /^#([A-Za-z][A-Za-z0-9_-]*)[\s{,]/ },
+  ],
+});
+
+registerLanguage({
+  name: 'scss',
+  displayName: 'SCSS / Sass',
+  extensions: ['.scss', '.sass'],
+  commentPrefixes: ['/*', ' *', '*/', '//'],
+  rules: [
+    // @mixin: @mixin flex-center($direction: row) {
+    { kind: 'function', pattern: /^@mixin\s+([A-Za-z][A-Za-z0-9_-]*)/ },
+    // @function: @function rem($px) {
+    { kind: 'function', pattern: /^@function\s+([A-Za-z][A-Za-z0-9_-]*)/ },
+    // @keyframes: @keyframes slideIn {
+    { kind: 'function', pattern: /^@keyframes\s+([A-Za-z][A-Za-z0-9_-]*)/ },
+    // @layer: @layer utilities {
+    { kind: 'module', pattern: /^@layer\s+([A-Za-z][A-Za-z0-9_.-]*)/ },
+    // SCSS variables: $brand-primary: #007bff;
+    { kind: 'property', pattern: /^\$([A-Za-z][A-Za-z0-9_-]*)\s*:/ },
+    // CSS custom properties: --color-primary: #007bff;
+    { kind: 'property', pattern: /^[ \t]*--([A-Za-z][A-Za-z0-9_-]*)\s*:/ },
+    // Placeholder selectors: %clearfix {
+    { kind: 'type', pattern: /^%([A-Za-z][A-Za-z0-9_-]*)\s*\{/ },
+    // Class selectors: .primary-button { or .card:hover { or indented .nested {
+    { kind: 'class', pattern: /^[ \t]*\.([A-Za-z][A-Za-z0-9_-]*)[\s{,:>#\[]/ },
+    // ID selectors: #hero-section {
+    { kind: 'property', pattern: /^#([A-Za-z][A-Za-z0-9_-]*)[\s{,]/ },
+  ],
+});
