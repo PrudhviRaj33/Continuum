@@ -10,12 +10,14 @@ However, to scale this into a massive enterprise-grade architecture and fully au
 - **Parsing Safeguards**: Added file size limits to prevent OOM errors on massive minified files.
 - **Stale Memory Decay**: Touched files are now automatically physically pruned (Garbage Collected) from the database after 24 hours to prevent infinite DB bloat.
 
-## Phase 2: Advanced Memory Management (Preventing Task Bloat)
-- **Session Summarization (Garbage Collection for Tasks)**: While we have garbage collection for `touched_files`, `save_task` entries can accumulate infinitely. If a user saves 500 tasks, the session state payload becomes bloated. We will introduce a background LLM process that periodically reads historical tasks, summarizes them into a single compressed paragraph, and deletes the raw history to keep the database and context payloads extremely lightweight.
-
-## Phase 3: AI Proactivity & Integration
+## Phase 2: IDE Extensions (Adoption)
+- **VS Code Extension**: A lightweight extension that detects Continuum in the project, auto-generates the correct `mcp.json` with absolute paths, and shows a status bar item with live server health. Removes the manual path-editing step that is the single biggest install failure point.
+- **JetBrains Plugin**: Same lifecycle management for IntelliJ-based IDEs.
 - **Pre-built System Prompts**: Ship `.cursorrules` and `.claude.md` template files in the repository. These will train the AI to autonomously call `save_task` when context is getting full, without relying entirely on human-triggered Slash Commands.
-- **IDE Extensions**: Build lightweight wrapper extensions (for VS Code, JetBrains) that automatically spawn and manage the MCP server lifecycle, removing the need for manual JSON configurations.
+
+## Phase 3: Memory Management (Stability)
+- **Task Garbage Collection**: `save_task` entries can accumulate without bound. When the task count for a session exceeds a configurable limit (default: 10), the oldest entries are collapsed into a single "prior context" summary row and the raw history is pruned. Fully deterministic — no LLM required, no cloud dependency, preserves the offline guarantee.
+- **Session Resume on Restart**: Each server restart currently creates a new session UUID, losing the previous session's context even though the data is still in the DB. Add an option to resume the most recent session on startup if it was active within the last N hours.
 
 ## Phase 4: Architectural Scaling (Search & Parsing)
 - **Semantic Search (Vector Embeddings)**: Currently, Continuum relies on SQLite's FTS5 engine, which is a *keyword* search. If the AI searches for `"user authentication"`, but the function is named `verify_jwt()`, it won't be found. We plan to integrate a Vector Database (like SQLite-VSS or Chroma) to store text embeddings, allowing the AI to search by *meaning* rather than exact character matching.

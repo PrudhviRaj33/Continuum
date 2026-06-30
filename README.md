@@ -118,7 +118,7 @@ Reload VS Code (`Cmd+Shift+P` on Mac / `Ctrl+Shift+P` on Windows → Developer: 
 | `find_related_files` | 🔍 Cross-layer search for symbols, features, and files |
 | `search_symbols` | 🔎 Full-text search all indexed symbols (FTS5) |
 | `get_schema` | 🗄️ Live DB schema for a table (MSSQL/PostgreSQL/MySQL, cached 1h) |
-| `get_dependencies` | 🕸️ Symbols defined in a file + outgoing relationships |
+| `get_dependencies` | 🕸️ Symbols defined in a file + outgoing relationships (relationship graph populated in Phase 4) |
 | `list_languages` | 🌍 All supported languages with indexed file/symbol counts |
 | `get_session_report` | 📊 Session metrics: tool calls, files touched, estimated tokens saved |
 | `health_check` | 🩺 Server health, uptime, DB status |
@@ -158,6 +158,8 @@ Create these in your project's `.claude/commands/` folder:
 | Markdown | `.md`, `.mdx` | H1 (doc), H2 (section), H3 (subsection) |
 
 **Adding a new language:** Create a file in `src/languages/definitions/yourlanguage.ts`, call `registerLanguage()` with your rules, and import it in `LanguageRegistry.ts`. No other changes needed.
+
+> **Note on parsing accuracy:** Symbol extraction uses regex, which covers the vast majority of real-world code. Highly complex cases — deeply nested generics, multi-line decorators, or unusual macro patterns — may occasionally be missed or partially extracted. AST-based parsing via Tree-sitter is planned for Phase 4 and will resolve these edge cases.
 
 ---
 

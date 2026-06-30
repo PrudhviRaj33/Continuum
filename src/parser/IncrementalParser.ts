@@ -86,14 +86,10 @@ export class IncrementalParser {
 
       db.prepare('DELETE FROM symbols WHERE file_id = ?').run(fileId);
 
-      // Delete from FTS (by file path)
-      for (const s of oldSymbols) {
-        db.prepare(
-          "DELETE FROM symbols_fts WHERE name = ? AND kind = ? AND file_path = ?"
-        ).run(s.name, s.kind, filePath);
-      }
-
       // Insert new symbols in a transaction for atomicity
+      const deleteFts = db.prepare(
+        "DELETE FROM symbols_fts WHERE name = ? AND kind = ? AND file_path = ?"
+      );
       const insertSymbol = db.prepare(`
         INSERT INTO symbols (file_id, name, kind, start_line, end_line, signature)
         VALUES (?, ?, ?, ?, ?, ?)
@@ -103,6 +99,11 @@ export class IncrementalParser {
       );
 
       db.transaction(() => {
+        // Delete from FTS inside transaction
+        for (const s of oldSymbols) {
+          deleteFts.run(s.name, s.kind, filePath);
+        }
+        
         for (const s of symbols) {
           insertSymbol.run(fileId, s.name, s.kind, s.startLine, s.endLine, s.signature);
           insertFts.run(s.name, s.kind, filePath);

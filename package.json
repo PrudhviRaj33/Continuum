@@ -12,6 +12,9 @@
   "keywords": ["mcp", "ai", "developer-tools", "code-analysis", "sqlite"],
   "author": "Prudhvi Gandrothu",
   "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "tsx src/mcp/McpServer.ts",
     "build": "NODE_OPTIONS=--max-old-space-size=4096 tsc && mkdir -p dist/database && cp src/database/schema.sql dist/database/",

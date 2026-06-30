@@ -133,12 +133,17 @@ export class FileWatcher {
     
     logger.info({ count: files.length }, 'Processing debounced file batch');
     
-    for (const file of files) {
-      try {
-        await this.parser.parseFile(file);
-      } catch (err) {
-        logger.error({ file, err }, 'Parse failed in batch');
-      }
+    // Process files concurrently in chunks to maximize CPU and I/O
+    const CHUNK_SIZE = 10;
+    for (let i = 0; i < files.length; i += CHUNK_SIZE) {
+      const chunk = files.slice(i, i + CHUNK_SIZE);
+      await Promise.all(chunk.map(async (file) => {
+        try {
+          await this.parser.parseFile(file);
+        } catch (err) {
+          logger.error({ file, err }, 'Parse failed in batch');
+        }
+      }));
     }
   }
 

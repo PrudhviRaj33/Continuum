@@ -373,3 +373,9 @@ process.on('uncaughtException', (err) => {
   closeDb();
   process.exit(1);
 });
+process.on('unhandledRejection', (reason) => {
+  logger.error({ reason }, 'Unhandled promise rejection');
+  watcher.stop();
+  closeDb();
+  process.exit(1);
+});

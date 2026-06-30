@@ -42,6 +42,9 @@ CREATE VIRTUAL TABLE IF NOT EXISTS symbols_fts USING fts5(
 );
 
 -- Relationships between symbols (imports, calls, extends, implements)
+-- NOTE: This table is schema-reserved for Phase 4 (Dependency Graphing via Tree-sitter/AST).
+-- The get_dependencies tool queries it today and returns an empty array until Phase 4 populates it.
+-- Do not remove — it is intentional scaffolding, not dead code.
 CREATE TABLE IF NOT EXISTS relationships (
   id        INTEGER PRIMARY KEY AUTOINCREMENT,
   from_id   INTEGER NOT NULL REFERENCES symbols(id) ON DELETE CASCADE,

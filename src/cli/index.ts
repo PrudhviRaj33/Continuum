@@ -15,7 +15,7 @@ if (command === 'init') {
     mcpServers: {
       continuum: {
         command: "npx",
-        args: ["continuum", "start"],
+        args: ["-y", "continuum-ai-mcp", "start"],
         env: {
           WATCH_PATHS: "${workspaceFolder}/src",
           DB_PATH: "${workspaceFolder}/knowledge.db",
@@ -112,6 +112,6 @@ Before you finish a complex feature, or if you reach a stopping point, **YOU MUS
 } else {
   console.log('Continuum AI MCP Setup');
   console.log('Usage:');
-  console.log('  npx continuum init   - Setup MCP config files in current directory');
-  console.log('  npx continuum start  - Run the MCP server manually');
+  console.log('  npx continuum-ai-mcp init   - Setup MCP config files in current directory');
+  console.log('  npx continuum-ai-mcp start  - Run the MCP server manually');
 }
