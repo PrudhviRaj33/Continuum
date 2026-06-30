@@ -1,6 +1,6 @@
 {
   "name": "continuum-ai-mcp",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "AI Development Memory Layer — Universal Language Support MCP Server",
   "main": "dist/mcp/McpServer.js",
   "files": [
@@ -23,7 +23,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run build",
+    "setup-claude": "node scripts/setup-claude.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.3",
