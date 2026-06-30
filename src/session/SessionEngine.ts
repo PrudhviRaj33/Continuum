@@ -40,7 +40,14 @@ export class SessionEngine {
       INSERT INTO sessions (id, started_at, updated_at)
       VALUES (?, unixepoch(), unixepoch())
     `).run(id);
-    logger.info({ sessionId: id }, 'Session started');
+
+    // Garbage Collection: Physically delete touched files older than 24 hours
+    // to prevent infinite database bloat over months of usage.
+    const pruneResult = db.prepare(`
+      DELETE FROM touched_files WHERE touched_at <= unixepoch() - 86400
+    `).run();
+
+    logger.info({ sessionId: id, prunedStaleFiles: pruneResult.changes }, 'Session started and stale memory pruned');
     return id;
   }
 
@@ -125,7 +132,7 @@ export class SessionEngine {
       .prepare(`
         SELECT path, action, MAX(touched_at) as touched_at
         FROM touched_files
-        WHERE session_id = ?
+        WHERE session_id = ? AND touched_at > unixepoch() - 86400
         GROUP BY path
         ORDER BY touched_at DESC
         LIMIT 100
@@ -172,7 +179,7 @@ export class SessionEngine {
       .prepare(`
         SELECT path, action, MAX(touched_at) as touched_at
         FROM touched_files
-        WHERE session_id = ?
+        WHERE session_id = ? AND touched_at > unixepoch() - 86400
         GROUP BY path
         ORDER BY touched_at DESC
       `)

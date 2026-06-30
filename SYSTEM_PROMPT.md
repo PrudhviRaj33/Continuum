@@ -1,4 +1,8 @@
-# The Rules of Continuum
+# Continuum System Prompt
+
+*This file defines the strict behavioral rules for AI assistants (like Claude, Cursor, or Copilot) operating within a Continuum-enabled repository. It ensures the AI correctly leverages the FTS5 SQLite index and memory tools instead of falling back to slow, token-heavy legacy commands.*
+
+## The Rules of Continuum
 
 You are operating inside a codebase powered by **Continuum** (an AI Memory & Context Layer). You have access to a specific suite of MCP tools designed to make your context discovery sub-millisecond fast and zero-token waste. 
 
@@ -22,4 +26,5 @@ If a user asks a vague question like *"Why is the auth failing?"*, **ALWAYS CALL
 
 ### Rule 4: The Handoff (Saving State)
 Before you finish a complex feature, or if you reach a stopping point, **YOU MUST CALL `save_task`**.
+- Do not let your context die when the chat closes. 
 - Summarize your goal, the technical decisions you made, the next steps required, and save it to the SQLite database so the next AI agent can pick up exactly where you left off.

@@ -35,6 +35,12 @@ export class IncrementalParser {
     }
 
     try {
+      const stats = await fs.stat(filePath);
+      if (stats.size > 1024 * 1024) {
+        logger.debug({ filePath, size: stats.size }, 'Skipping: file exceeds 1MB limit');
+        return;
+      }
+      
       const content = await fs.readFile(filePath, 'utf-8');
       const hash = crypto.createHash('md5').update(content).digest('hex');
       const sizeBytes = Buffer.byteLength(content, 'utf-8');

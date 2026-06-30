@@ -40,6 +40,9 @@ export class FileWatcher {
   private readonly session: SessionEngine;
   private readonly parser: IncrementalParser;
   private isInitialScanComplete = false;
+  private pendingParseQueue: Set<string> = new Set();
+  private pendingTouchQueue: Map<string, 'created' | 'modified' | 'deleted'> = new Map();
+  private parseTimer: NodeJS.Timeout | null = null;
 
   constructor(session: SessionEngine, parser: IncrementalParser) {
     this.session = session;
@@ -83,15 +86,60 @@ export class FileWatcher {
 
     logger.debug({ filePath, action }, 'File changed');
 
-    // Only record to session AFTER initial scan (avoid polluting session with all existing files)
-    if (this.isInitialScanComplete) {
-      this.session.recordFileTouch(filePath, action);
+    this.enqueueTouch(filePath, action);
+    this.enqueueParse(filePath);
+  }
+
+  private enqueueParse(filePath: string): void {
+    this.pendingParseQueue.add(filePath);
+    this.scheduleQueue();
+  }
+
+  private enqueueTouch(filePath: string, action: 'created' | 'modified' | 'deleted'): void {
+    if (!this.isInitialScanComplete) return;
+    this.pendingTouchQueue.set(filePath, action);
+    this.scheduleQueue();
+  }
+
+  private scheduleQueue(): void {
+    if (this.parseTimer) {
+      clearTimeout(this.parseTimer);
+    }
+    this.parseTimer = setTimeout(() => {
+      this.processQueue().catch(err => logger.error({ err }, 'Queue processing error'));
+    }, 500);
+  }
+
+  private async processQueue(): Promise<void> {
+    const files = Array.from(this.pendingParseQueue);
+    this.pendingParseQueue.clear();
+    
+    const touches = Array.from(this.pendingTouchQueue.entries());
+    this.pendingTouchQueue.clear();
+    
+    // Process touches
+    if (touches.length > 0) {
+      const bulkThreshold = parseInt(process.env.BULK_TOUCH_THRESHOLD || '30', 10);
+      if (touches.length <= bulkThreshold) {
+        for (const [filePath, action] of touches) {
+          this.session.recordFileTouch(filePath, action);
+        }
+      } else {
+        logger.info({ count: touches.length, threshold: bulkThreshold }, 'Bulk operation detected, skipping session touch recording');
+      }
     }
 
-    // Always parse for indexing
-    this.parser.parseFile(filePath).catch((err) =>
-      logger.error({ filePath, err }, 'Parse failed')
-    );
+    if (files.length === 0) return;
+    
+    logger.info({ count: files.length }, 'Processing debounced file batch');
+    
+    for (const file of files) {
+      try {
+        await this.parser.parseFile(file);
+      } catch (err) {
+        logger.error({ file, err }, 'Parse failed in batch');
+      }
+    }
   }
 
   private handleDelete(filePath: string): void {
@@ -99,9 +147,7 @@ export class FileWatcher {
 
     logger.debug({ filePath }, 'File deleted');
 
-    if (this.isInitialScanComplete) {
-      this.session.recordFileTouch(filePath, 'deleted');
-    }
+    this.enqueueTouch(filePath, 'deleted');
 
     // Remove from database
     const { getDb } = require('../database/Database');

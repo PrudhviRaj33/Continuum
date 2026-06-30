@@ -11,6 +11,7 @@ export function getDb(): BetterSqlite3.Database {
   if (!db) {
     db = new BetterSqlite3(DB_PATH);
     db.pragma('journal_mode = WAL');
+    db.pragma('busy_timeout = 5000');
     db.pragma('foreign_keys = ON');
     db.pragma('cache_size = -16000'); // 16 MB page cache
     db.pragma('temp_store = MEMORY');
