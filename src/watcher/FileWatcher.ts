@@ -53,10 +53,24 @@ export class FileWatcher {
     const resolved = watchPaths.map((p) => path.resolve(p));
     const extensions = getAllWatchedExtensions();
 
+    // Merge hardcoded patterns with any user-supplied WATCH_IGNORE patterns
+    const customIgnore = (process.env.WATCH_IGNORE || '')
+      .split(',')
+      .map((p) => p.trim())
+      .filter(Boolean)
+      .map((p) => new RegExp(p.replace(/\//g, '[\\\\/]')));
+    const ignoredPatterns = customIgnore.length
+      ? [...IGNORED_PATTERNS, ...customIgnore]
+      : IGNORED_PATTERNS;
+
+    if (customIgnore.length) {
+      logger.info({ patterns: customIgnore.map(String) }, 'FileWatcher: custom ignore patterns active');
+    }
+
     logger.info({ paths: resolved, languageCount: extensions.length }, 'FileWatcher starting');
 
     this.watcher = chokidar.watch(resolved, {
-      ignored: IGNORED_PATTERNS,
+      ignored: ignoredPatterns,
       persistent: true,
       ignoreInitial: false, // Parse existing files on startup
       awaitWriteFinish: {

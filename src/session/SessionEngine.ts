@@ -15,6 +15,16 @@ export interface TouchedFile {
   touched_at: number;
 }
 
+export interface RecentSessionSummary {
+  session_id: string;
+  goal: string | null;
+  started_at: number;
+  updated_at: number;
+  compaction_count: number;
+  files_touched: number;
+  last_task_goal: string | null;
+}
+
 export interface SessionState {
   session_id: string;
   goal: string | null;
@@ -181,6 +191,29 @@ export class SessionEngine {
         ORDER BY touched_at DESC
       `)
       .all(this.sessionId) as TouchedFile[];
+  }
+
+  /** Last N completed sessions (excluding current) with summary info. */
+  getRecentSessions(limit = 5): RecentSessionSummary[] {
+    const db = getDb();
+    return db
+      .prepare(`
+        SELECT
+          s.id                 AS session_id,
+          s.goal,
+          s.started_at,
+          s.updated_at,
+          s.compaction_count,
+          COUNT(tf.id)         AS files_touched,
+          (SELECT t.goal FROM tasks t WHERE t.session_id = s.id ORDER BY t.saved_at DESC LIMIT 1) AS last_task_goal
+        FROM sessions s
+        LEFT JOIN touched_files tf ON tf.session_id = s.id
+        WHERE s.id != ?
+        GROUP BY s.id
+        ORDER BY s.started_at DESC
+        LIMIT ?
+      `)
+      .all(this.sessionId, limit) as RecentSessionSummary[];
   }
 
   recordCompaction(): void {

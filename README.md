@@ -115,14 +115,15 @@ Reload VS Code (`Cmd+Shift+P` on Mac / `Ctrl+Shift+P` on Windows → Developer: 
 | `get_session` | 🔄 **Core recovery tool.** Full session state including last 5 saved tasks — call after any context compaction |
 | `save_task` | 💾 Save structured task state (goal, decisions, next steps, open questions) |
 | `get_touched_files` | 📁 Files modified/created/deleted this session |
+| `get_recent_sessions` | 🕰️ List past sessions with goals and file activity — cross-session continuity |
 | `find_related_files` | 🔍 Cross-layer search for symbols, features, and files |
-| `search_symbols` | 🔎 Full-text search all indexed symbols (FTS5) |
+| `search_symbols` | 🔎 Full-text + substring search across all indexed symbols — finds camelCase partials |
 | `get_file_symbols` | 📄 All symbols in a specific file, grouped by kind — accepts partial paths |
 | `reindex` | ♻️ Force re-parse one file or all files, ignoring cached hashes |
 | `get_schema` | 🗄️ Live DB schema for a table (MSSQL/PostgreSQL/MySQL, cached 1h) |
-| `get_dependencies` | 🕸️ Symbols defined in a file + outgoing relationships (relationship graph populated in Phase 4) |
+| `get_dependencies` | 🕸️ Symbols defined in a file + import relationships extracted from TS/JS |
 | `list_languages` | 🌍 All supported languages with indexed file/symbol counts |
-| `get_session_report` | 📊 Session metrics: tool calls, files touched, estimated tokens saved |
+| `get_session_report` | 📊 Session metrics: tool calls, files touched, actual tokens returned |
 | `health_check` | 🩺 Server health, uptime, DB status |
 
 ---
@@ -205,6 +206,7 @@ MYSQL_PASSWORD=mypassword
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `WATCH_PATHS` | `./src` | Comma-separated paths to watch |
+| `WATCH_IGNORE` | _(none)_ | Comma-separated regex patterns to exclude (e.g. `__generated__,migrations/versions`) |
 | `DB_PATH` | `./knowledge.db` | SQLite database location |
 | `LOG_LEVEL` | `info` | `debug` \| `info` \| `warn` \| `error` |
 | `NODE_ENV` | `development` | Set to `production` for JSON logs |

@@ -184,12 +184,13 @@ server.tool(
 
     const outgoing = db
       .prepare(`
-        SELECT r.to_name, r.kind
+        SELECT r.to_name, r.kind, r.to_file
         FROM relationships r
         JOIN symbols s ON r.from_id = s.id
         WHERE s.file_id = ?
+        ORDER BY r.kind, r.to_name
       `)
-      .all(file.id) as { to_name: string; kind: string }[];
+      .all(file.id) as { to_name: string; kind: string; to_file: string | null }[];
 
     const result = JSON.stringify({ symbols, outgoing_relationships: outgoing }, null, 2);
     logToolCall('get_dependencies', input, result, Date.now() - start);
@@ -235,17 +236,17 @@ server.tool(
       .prepare('SELECT COUNT(DISTINCT path) AS count FROM touched_files WHERE session_id = ?')
       .get(session.getSessionId()) as { count: number };
 
-    const getSessionCalls =
-      toolCalls.find((t) => t.tool_name === 'get_session')?.count ?? 0;
-    const estimatedTokensSaved = getSessionCalls * 5000 + touchedCount.count * 800;
+    const totalTokensReturned = toolCalls.reduce(
+      (sum, t) => sum + (t.total_tokens ?? 0), 0
+    );
 
     const report = {
-      session_id:            sess.id,
-      uptime_minutes:        Math.round(session.getUptimeSeconds() / 60),
-      compactions_survived:  sess.compaction_count,
-      files_touched:         touchedCount.count,
-      tool_calls:            toolCalls,
-      estimated_tokens_saved: estimatedTokensSaved,
+      session_id:           sess.id,
+      uptime_minutes:       Math.round(session.getUptimeSeconds() / 60),
+      compactions_survived: sess.compaction_count,
+      files_touched:        touchedCount.count,
+      tool_calls:           toolCalls,
+      total_tokens_returned: totalTokensReturned,
     };
 
     const result = JSON.stringify(report, null, 2);
@@ -355,7 +356,24 @@ server.tool(
   }
 );
 
-// ── Tool 12: health_check ──────────────────────────────────────────────────
+// ── Tool 12: get_recent_sessions ──────────────────────────────────────────
+server.tool(
+  'get_recent_sessions',
+  'List recent sessions (excluding current) with goals, compaction counts, and file activity. ' +
+  'Useful for resuming work from a previous day or recovering context across server restarts.',
+  {
+    limit: z.number().int().min(1).max(20).optional().default(5).describe('Number of past sessions to return'),
+  },
+  async (input) => {
+    const start = Date.now();
+    const sessions = session.getRecentSessions(input.limit);
+    const result = JSON.stringify({ count: sessions.length, sessions }, null, 2);
+    logToolCall('get_recent_sessions', input, result, Date.now() - start);
+    return { content: [{ type: 'text', text: result }] };
+  }
+);
+
+// ── Tool 13: health_check ──────────────────────────────────────────────────
 server.tool(
   'health_check',
   'Check Continuum server health — uptime, database status, indexed file count, active session.',

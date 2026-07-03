@@ -16,6 +16,14 @@ function applyPragmasAndSchema(instance: BetterSqlite3.Database): void {
 
   const schema = fs.readFileSync(SCHEMA_PATH, 'utf-8');
   instance.exec(schema);
+
+  // Incremental migrations — safe to run on every startup
+  runMigrations(instance);
+}
+
+function runMigrations(instance: BetterSqlite3.Database): void {
+  // Add to_file column to relationships for storing the import module path
+  try { instance.exec(`ALTER TABLE relationships ADD COLUMN to_file TEXT`); } catch { /* already exists */ }
 }
 
 function seedMetadata(instance: BetterSqlite3.Database): void {

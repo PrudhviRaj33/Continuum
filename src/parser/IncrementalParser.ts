@@ -30,6 +30,11 @@ interface ExtractedSymbol {
   signature: string;
 }
 
+interface ImportDep {
+  name: string;
+  from: string;
+}
+
 /**
  * Regex-based incremental file parser.
  *
@@ -121,12 +126,17 @@ export class IncrementalParser {
         for (const s of oldSymbols) {
           deleteFts.run(s.name, s.kind, filePath);
         }
-        
+
         for (const s of symbols) {
           insertSymbol.run(fileId, s.name, s.kind, s.startLine, s.endLine, s.signature);
           insertFts.run(s.name, s.kind, filePath);
         }
       })();
+
+      // Extract import relationships for TS/JS files
+      if (langDef.name === 'typescript' || langDef.name === 'javascript') {
+        this.storeImportRelationships(filePath, content, fileId, db);
+      }
 
       logger.debug(
         { filePath, language: langDef.name, symbolCount: symbols.length },
@@ -184,6 +194,114 @@ export class IncrementalParser {
     }
 
     return symbols;
+  }
+
+  /**
+   * Parse import statements from TS/JS content and store them as relationships.
+   * Uses the file's first symbol as the anchor (from_id) so get_dependencies can retrieve them.
+   */
+  private storeImportRelationships(
+    filePath: string,
+    content: string,
+    fileId: number,
+    db: ReturnType<typeof import('../database/Database').getDb>
+  ): void {
+    try {
+      const deps = this.extractImportDeps(content);
+      if (deps.length === 0) return;
+
+      // Anchor imports to the first symbol in the file — required by schema (from_id NOT NULL)
+      const anchor = db
+        .prepare('SELECT id FROM symbols WHERE file_id = ? LIMIT 1')
+        .get(fileId) as { id: number } | undefined;
+      if (!anchor) return;
+
+      // Clear old import relationships for this file's symbols
+      db.prepare(`
+        DELETE FROM relationships
+        WHERE from_id IN (SELECT id FROM symbols WHERE file_id = ?)
+        AND kind = 'imports'
+      `).run(fileId);
+
+      const insert = db.prepare(
+        'INSERT INTO relationships (from_id, to_name, kind, to_file) VALUES (?, ?, ?, ?)'
+      );
+      db.transaction(() => {
+        for (const dep of deps) {
+          insert.run(anchor.id, dep.name, 'imports', dep.from);
+        }
+      })();
+    } catch (err) {
+      logger.debug({ filePath, err }, 'Import extraction failed (non-fatal)');
+    }
+  }
+
+  /** Extract named, default, and namespace imports from TS/JS source. */
+  private extractImportDeps(content: string): ImportDep[] {
+    const deps: ImportDep[] = [];
+    const lines = content.split('\n');
+    let i = 0;
+
+    while (i < lines.length) {
+      const trimmed = lines[i].trim();
+
+      // Only process lines that start an import statement
+      if (!/^import[\s{*]/.test(trimmed)) {
+        i++;
+        continue;
+      }
+
+      // Collect multi-line import: keep appending until we see 'from ...'
+      let stmt = trimmed;
+      while (!(/from\s+['"]/.test(stmt)) && i + 1 < lines.length) {
+        i++;
+        stmt += ' ' + lines[i].trim();
+      }
+      i++;
+
+      const fromMatch = /from\s+['"]([^'"]+)['"]/.exec(stmt);
+      if (!fromMatch) continue;
+      const fromPath = fromMatch[1];
+
+      // Named imports: { A, B as C, type D }
+      const namedBlock = /\{([^}]+)\}/.exec(stmt);
+      if (namedBlock) {
+        const names = namedBlock[1]
+          .split(',')
+          .map((n) =>
+            n.trim()
+              .replace(/^type\s+/, '')   // strip leading 'type'
+              .replace(/\s+as\s+\S+/, '') // strip alias ' as X'
+              .trim()
+          )
+          .filter((n) => n.length > 1 && /^[A-Za-z_$]/.test(n));
+        for (const name of names) deps.push({ name, from: fromPath });
+      }
+
+      // Namespace import: import * as X
+      const nsMatch = /\*\s+as\s+([A-Za-z_$][A-Za-z0-9_$]+)/.exec(stmt);
+      if (nsMatch) {
+        deps.push({ name: nsMatch[1], from: fromPath });
+        continue;
+      }
+
+      // Default import: import X from '...' (no braces, no *)
+      if (!namedBlock) {
+        const defMatch = /^import\s+(?:type\s+)?([A-Za-z_$][A-Za-z0-9_$]+)\s/.exec(stmt);
+        if (defMatch && defMatch[1] !== 'type') {
+          deps.push({ name: defMatch[1], from: fromPath });
+        }
+      }
+    }
+
+    // Deduplicate by name+from
+    const seen = new Set<string>();
+    return deps.filter((d) => {
+      const key = `${d.name}|${d.from}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }
 
   /**

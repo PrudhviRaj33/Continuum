@@ -43,10 +43,22 @@ export class KnowledgeEngine {
    */
   searchSymbols(query: string, limit = 30): SymbolSearchResult[] {
     const db = getDb();
+    const seen = new Set<string>();
+    const results: SymbolSearchResult[] = [];
 
-    // Try FTS5 first for ranking
+    const dedup = (rows: SymbolSearchResult[]) => {
+      for (const r of rows) {
+        const key = `${r.name}|${r.file_path}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          results.push(r);
+        }
+      }
+    };
+
+    // FTS5 exact/ranked results first
     try {
-      const results = db
+      const ftsRows = db
         .prepare(`
           SELECT
             s.name,
@@ -65,30 +77,37 @@ export class KnowledgeEngine {
           LIMIT ?
         `)
         .all(query, limit) as SymbolSearchResult[];
-
-      if (results.length > 0) return results;
+      dedup(ftsRows);
     } catch {
-      // FTS5 query may fail on special chars — fall through to LIKE
+      // FTS5 query may fail on special chars — LIKE below covers it
     }
 
-    // Fallback: LIKE search
-    return db
-      .prepare(`
-        SELECT
-          s.name,
-          s.kind,
-          f.path   AS file_path,
-          s.start_line,
-          s.end_line,
-          s.signature,
-          f.language
-        FROM symbols s
-        JOIN files f ON s.file_id = f.id
-        WHERE s.name LIKE ? OR f.path LIKE ?
-        ORDER BY s.name
-        LIMIT ?
-      `)
-      .all(`%${query}%`, `%${query}%`, limit) as SymbolSearchResult[];
+    // Always also run LIKE so camelCase substrings are found.
+    // e.g. searching "getUser" finds "getUserById" even if FTS5 returned nothing.
+    if (results.length < limit) {
+      const likeRows = db
+        .prepare(`
+          SELECT
+            s.name,
+            s.kind,
+            f.path   AS file_path,
+            s.start_line,
+            s.end_line,
+            s.signature,
+            f.language
+          FROM symbols s
+          JOIN files f ON s.file_id = f.id
+          WHERE s.name LIKE ? OR f.path LIKE ?
+          ORDER BY
+            CASE WHEN s.name LIKE ? THEN 0 ELSE 1 END,
+            s.name
+          LIMIT ?
+        `)
+        .all(`%${query}%`, `%${query}%`, `${query}%`, limit) as SymbolSearchResult[];
+      dedup(likeRows);
+    }
+
+    return results.slice(0, limit);
   }
 
   /**
