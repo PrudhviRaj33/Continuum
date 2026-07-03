@@ -3,18 +3,28 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { resolveDbPath, detectProjectRoot } from '../utils/projectRoot';
 
-// Resolve project root and DB path early — before any DB open attempt.
-// Priority: DB_PATH env var > .continuum/knowledge.db in project root > cwd fallback.
-const _projectRoot = process.env.PROJECT_ROOT
-  ? path.resolve(process.env.PROJECT_ROOT)
-  : (process.env.WATCH_PATHS
-      ? path.resolve(process.env.WATCH_PATHS.split(',')[0].trim())
-      : detectProjectRoot(process.cwd()));
-
-const DB_PATH = resolveDbPath(_projectRoot);
 const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
 
 let db: BetterSqlite3.Database | null = null;
+
+/**
+ * Resolve the DB path lazily, on first actual use — never at module-import time.
+ *
+ * Why this matters: with ESM-style `import` (as used by tsx/esbuild), import
+ * statements are hoisted above other top-level code in the same file, so a module-level
+ * `const DB_PATH = resolveDbPath(...)` would evaluate BEFORE any test (or caller) gets
+ * a chance to set process.env.DB_PATH — silently resolving to the wrong project root
+ * every time. Computing it inside getDb() guarantees env vars are fully settled first.
+ */
+function resolveActiveDbPath(): string {
+  const projectRoot = process.env.PROJECT_ROOT
+    ? path.resolve(process.env.PROJECT_ROOT)
+    : (process.env.WATCH_PATHS
+        ? path.resolve(process.env.WATCH_PATHS.split(',')[0].trim())
+        : detectProjectRoot(process.cwd()));
+
+  return resolveDbPath(projectRoot);
+}
 
 function applyPragmasAndSchema(instance: BetterSqlite3.Database): void {
   instance.pragma('journal_mode = WAL');
@@ -33,6 +43,8 @@ function applyPragmasAndSchema(instance: BetterSqlite3.Database): void {
 function runMigrations(instance: BetterSqlite3.Database): void {
   // Add to_file column to relationships for storing the import module path
   try { instance.exec(`ALTER TABLE relationships ADD COLUMN to_file TEXT`); } catch { /* already exists */ }
+
+  migrateContentlessFts(instance);
 
   // session_summaries — written by Stop hook on session end
   try {
@@ -65,6 +77,46 @@ function runMigrations(instance: BetterSqlite3.Database): void {
     `);
     instance.exec(`CREATE INDEX IF NOT EXISTS idx_tool_errors_session ON tool_errors(session_id, occurred_at)`);
   } catch { /* already exists */ }
+}
+
+/**
+ * Repair symbols_fts if it was created in the old contentless mode (content='').
+ * Contentless FTS5 tables cannot have their own columns read outside a MATCH
+ * clause, which silently broke the ranked-search JOIN in KnowledgeEngine —
+ * searchSymbols() was falling back to LIKE-only matching for every query.
+ * This drops the old index and rebuilds it as self-contained from the
+ * symbols/files tables (the source of truth), which is a pure re-derivation —
+ * no user data is lost.
+ */
+function migrateContentlessFts(instance: BetterSqlite3.Database): void {
+  const existing = instance
+    .prepare("SELECT sql FROM sqlite_master WHERE name = 'symbols_fts'")
+    .get() as { sql: string } | undefined;
+
+  if (!existing || !existing.sql.includes("content=''")) return; // already fixed or fresh install
+
+  process.stderr.write(
+    '[Continuum] Migrating symbols_fts to self-contained FTS5 (fixes broken ranked search)...\n'
+  );
+
+  instance.exec('DROP TABLE symbols_fts');
+  instance.exec(`
+    CREATE VIRTUAL TABLE symbols_fts USING fts5(
+      name,
+      kind,
+      file_path
+    )
+  `);
+
+  instance.exec(`
+    INSERT INTO symbols_fts (name, kind, file_path)
+    SELECT s.name, s.kind, f.path
+    FROM symbols s
+    JOIN files f ON s.file_id = f.id
+  `);
+
+  const count = (instance.prepare('SELECT COUNT(*) AS n FROM symbols_fts').get() as { n: number }).n;
+  process.stderr.write(`[Continuum] symbols_fts rebuilt with ${count} entries.\n`);
 }
 
 function seedMetadata(instance: BetterSqlite3.Database): void {
@@ -156,7 +208,7 @@ function openDb(dbPath: string): BetterSqlite3.Database {
 
 export function getDb(): BetterSqlite3.Database {
   if (!db) {
-    db = openDb(DB_PATH);
+    db = openDb(resolveActiveDbPath());
   }
   return db;
 }

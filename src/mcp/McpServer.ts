@@ -323,12 +323,14 @@ server.tool(
   },
   async (input) => {
     const start = Date.now();
-    const count = await watcher.reindex(input.file_path);
+    const { queued, orphansRemoved } = await watcher.reindex(input.file_path);
     const result = JSON.stringify({
-      queued: count,
+      queued,
+      orphans_removed: orphansRemoved,
       message: input.file_path
         ? `Reindexed: ${input.file_path}`
-        : `${count} files queued for reindexing`,
+        : `${queued} files queued for reindexing` +
+          (orphansRemoved > 0 ? `, ${orphansRemoved} stale entries purged (deleted files no longer on disk)` : ''),
     });
     logToolCall('reindex', input, result, Date.now() - start);
     return { content: [{ type: 'text', text: result }] };

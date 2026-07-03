@@ -87,6 +87,11 @@ export class FileWatcher {
       .on('ready', () => {
         this.isInitialScanComplete = true;
         logger.info('FileWatcher: initial scan complete');
+
+        // Reconcile the index against disk — purges files that were deleted while
+        // Continuum wasn't running, or that fell outside a since-narrowed watch scope.
+        // Without this, stale symbols from long-gone files leak into search results forever.
+        this.parser.sweepOrphans().catch(err => logger.error({ err }, 'Orphan sweep failed'));
       });
   }
 
@@ -168,24 +173,17 @@ export class FileWatcher {
 
     this.enqueueTouch(filePath, 'deleted');
 
-    // Remove from database
-    const { getDb } = require('../database/Database');
-    const db = getDb();
-    const file = db
-      .prepare('SELECT id FROM files WHERE path = ?')
-      .get(filePath) as { id: number } | undefined;
-
-    if (file) {
-      db.prepare('DELETE FROM files WHERE id = ?').run(file.id);
-      logger.debug({ filePath }, 'Removed deleted file from index');
-    }
+    // removeFile() cascades files → symbols → relationships AND cleans the
+    // symbols_fts shadow table, which has no foreign key and would otherwise
+    // leak dead rows forever (invisible to search, but unbounded index bloat).
+    this.parser.removeFile(filePath);
   }
 
   /**
    * Force reindex one file or all watched files by resetting their stored hash.
-   * Returns the count of files queued for re-parsing.
+   * Returns the count of files queued for re-parsing and any orphans purged.
    */
-  async reindex(filePath?: string): Promise<number> {
+  async reindex(filePath?: string): Promise<{ queued: number; orphansRemoved: number }> {
     const { getDb } = require('../database/Database') as typeof import('../database/Database');
     const db = getDb();
 
@@ -194,8 +192,13 @@ export class FileWatcher {
       db.prepare("UPDATE files SET hash = 'force-reindex' WHERE path = ?").run(filePath);
       await this.parser.parseFile(filePath);
       logger.info({ filePath }, 'Force reindexed single file');
-      return 1;
+      return { queued: 1, orphansRemoved: 0 };
     }
+
+    // Full reindex is also the moment to reconcile against disk — purge any
+    // file that no longer exists before re-queueing the rest. Otherwise a "reindex
+    // everything" request would faithfully re-parse files that were deleted long ago.
+    const orphansRemoved = await this.parser.sweepOrphans();
 
     // All files: reset hashes and re-enqueue via watcher paths
     const result = db.prepare("UPDATE files SET hash = 'force-reindex'").run();
@@ -211,8 +214,8 @@ export class FileWatcher {
     }
     this.scheduleQueue();
 
-    logger.info({ count }, 'Force reindex queued for all files');
-    return count;
+    logger.info({ count, orphansRemoved }, 'Force reindex queued for all files');
+    return { queued: count, orphansRemoved };
   }
 
   stop(): void {

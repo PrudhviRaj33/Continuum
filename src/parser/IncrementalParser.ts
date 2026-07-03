@@ -44,6 +44,69 @@ interface ImportDep {
  */
 export class IncrementalParser {
   /**
+   * Remove a file and all its derived data from the index — symbols (via CASCADE),
+   * relationships (via CASCADE), and symbols_fts (no FK, must be cleaned manually).
+   * Call this whenever a file is known to no longer exist, whether from a watcher
+   * 'unlink' event, an ENOENT during parse, or a startup orphan sweep.
+   */
+  removeFile(filePath: string): void {
+    const db = getDb();
+
+    const file = db
+      .prepare('SELECT id FROM files WHERE path = ?')
+      .get(filePath) as { id: number } | undefined;
+
+    if (!file) return;
+
+    const orphanedSymbols = db
+      .prepare('SELECT name, kind FROM symbols WHERE file_id = ?')
+      .all(file.id) as { name: string; kind: string }[];
+
+    db.transaction(() => {
+      // files CASCADE-deletes symbols and relationships automatically.
+      db.prepare('DELETE FROM files WHERE id = ?').run(file.id);
+
+      // symbols_fts has no FK — must be cleaned explicitly or it accumulates
+      // dead rows forever (invisible to search due to the INNER JOIN, but a
+      // permanent, unbounded index-size leak on long-lived repos).
+      const deleteFts = db.prepare(
+        'DELETE FROM symbols_fts WHERE name = ? AND kind = ? AND file_path = ?'
+      );
+      for (const s of orphanedSymbols) {
+        deleteFts.run(s.name, s.kind, filePath);
+      }
+    })();
+
+    logger.debug({ filePath, symbolsRemoved: orphanedSymbols.length }, 'Removed file from index');
+  }
+
+  /**
+   * Reconcile the files table against the actual filesystem. Removes any indexed
+   * file that no longer exists on disk — covers files deleted while the watcher
+   * wasn't running, or files that fell outside a since-narrowed watch scope.
+   * Safe to call on every startup; it's a pure existence check, not a re-parse.
+   */
+  async sweepOrphans(): Promise<number> {
+    const db = getDb();
+    const allFiles = db.prepare('SELECT path FROM files').all() as { path: string }[];
+
+    let removed = 0;
+    for (const { path: filePath } of allFiles) {
+      try {
+        await fs.access(filePath);
+      } catch {
+        this.removeFile(filePath);
+        removed++;
+      }
+    }
+
+    if (removed > 0) {
+      logger.info({ removed }, 'Startup orphan sweep: purged files no longer on disk');
+    }
+    return removed;
+  }
+
+  /**
    * Parse a single file and upsert its symbols into the database.
    * Silently skips files whose hash hasn't changed.
    */
@@ -143,6 +206,14 @@ export class IncrementalParser {
         'Parsed file'
       );
     } catch (err) {
+      // File vanished between being queued and being read (deleted, moved, or
+      // a race with a bulk git operation). Treat as a delete instead of leaving
+      // a stale files/symbols/symbols_fts entry that no 'unlink' event will ever clean up.
+      if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
+        this.removeFile(filePath);
+        logger.debug({ filePath }, 'File vanished before parse — removed from index');
+        return;
+      }
       logger.error({ filePath, err }, 'Failed to parse file');
     }
   }

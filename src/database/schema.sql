@@ -34,11 +34,13 @@ CREATE TABLE IF NOT EXISTS symbols (
 );
 
 -- Full-text search index over symbol names (SQLite FTS5)
+-- Self-contained (not contentless): column values must be readable via JOIN
+-- for search ranking to work. A contentless (content='') table cannot be
+-- read outside a MATCH clause, which silently breaks the ranked-search JOIN.
 CREATE VIRTUAL TABLE IF NOT EXISTS symbols_fts USING fts5(
   name,
   kind,
-  file_path,
-  content=''  -- contentless: we store data in symbols table
+  file_path
 );
 
 -- Relationships between symbols (imports, calls, extends, implements)
