@@ -167,12 +167,17 @@ function initCommand(): void {
 
 if (command === 'init') {
   initCommand();
+} else if (command === 'status') {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { runStatus } = require('./status') as typeof import('./status');
+  runStatus(process.argv.includes('--json'));
 } else if (command === 'start') {
   require('../mcp/McpServer.js');
 } else {
   console.log('Continuum — AI development memory layer');
   console.log('');
   console.log('Usage:');
-  console.log('  npx continuum-ai-mcp init    Set up this project (MCP config + hooks + gitignore)');
-  console.log('  npx continuum-ai-mcp start   Run the MCP server (normally started by your editor)');
+  console.log('  npx continuum-ai-mcp init            Set up this project (MCP config + hooks + gitignore)');
+  console.log('  npx continuum-ai-mcp status [--json]  Show project, index, session, and hook health');
+  console.log('  npx continuum-ai-mcp start           Run the MCP server (normally started by your editor)');
 }
