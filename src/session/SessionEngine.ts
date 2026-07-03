@@ -93,6 +93,10 @@ export class SessionEngine {
     return this.sessionId;
   }
 
+  isResumed(): boolean {
+    return this.resumed;
+  }
+
   getUptimeSeconds(): number {
     return Math.floor(Date.now() / 1000) - this.startTime;
   }

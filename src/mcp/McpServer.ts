@@ -7,6 +7,7 @@ import { IncrementalParser } from '../parser/IncrementalParser';
 import { KnowledgeEngine } from '../knowledge/KnowledgeEngine';
 import { SchemaReader } from '../schema/SchemaReader';
 import { getDb, closeDb } from '../database/Database';
+import { resolveWatchPaths, detectProjectRoot } from '../utils/projectRoot';
 import { logger } from '../utils/logger';
 
 // Environment variables are injected by the MCP client (IDE) or Docker.
@@ -20,7 +21,11 @@ const watcher  = new FileWatcher(session, parser);
 const knowledge = new KnowledgeEngine();
 const schema   = new SchemaReader();
 
-const watchPaths = (process.env.WATCH_PATHS || './src').split(',').map((p) => p.trim());
+// Resolve watch paths — auto-detects project root from cwd if WATCH_PATHS not set.
+// Each project gets its own Continuum instance via per-project .mcp.json (no manual config).
+const watchPaths = resolveWatchPaths();
+const projectRoot = detectProjectRoot(watchPaths[0]);
+logger.info({ watchPaths, projectRoot }, 'Continuum starting');
 watcher.start(watchPaths);
 
 // ── MCP Server ─────────────────────────────────────────────────────────────
@@ -391,15 +396,19 @@ server.tool(
     const metaMap = Object.fromEntries(meta.map((m) => [m.key, m.value]));
 
     const health = {
-      status:        'ok',
-      version:       metaMap['version'] ?? '1.0.0',
-      uptime_s:      session.getUptimeSeconds(),
-      session_id:    session.getSessionId(),
-      boot_count:    Number(metaMap['boot_count'] ?? 1),
-      db_status:     'connected',
-      indexed_files:  fileCount,
+      status:          'ok',
+      version:         metaMap['version'] ?? '1.0.0',
+      uptime_s:        session.getUptimeSeconds(),
+      session_id:      session.getSessionId(),
+      resumed:         session.isResumed(),
+      boot_count:      Number(metaMap['boot_count'] ?? 1),
+      db_status:       'connected',
+      project_root:    projectRoot,
+      watch_paths:     watchPaths,
+      auto_detected:   !process.env.WATCH_PATHS,
+      indexed_files:   fileCount,
       indexed_symbols: symbolCount,
-      schema_reader: schema.isEnabled() ? process.env.DB_TYPE : 'disabled',
+      schema_reader:   schema.isEnabled() ? process.env.DB_TYPE : 'disabled',
     };
 
     const result = JSON.stringify(health, null, 2);

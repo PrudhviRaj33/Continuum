@@ -21,6 +21,8 @@ AI coding assistants lose all context when their conversation fills up (context 
 
 **Continuum fixes this.** It persists session state in a local SQLite database and exposes it through MCP tools so any AI assistant can instantly recover full context.
 
+> **Zero config.** Open any project in VS Code — Continuum detects the project root automatically. No `WATCH_PATHS` to configure. Each project gets its own isolated symbol index.
+
 ---
 
 ## Architecture
@@ -49,62 +51,58 @@ FileWatcher ──► IncrementalParser ──► SQLite (knowledge.db)
 ## Quick Start
 
 ```bash
-# 1. Clone
+# 1. Clone and build
 git clone https://github.com/yourusername/continuum
 cd continuum
-
-# 2. Install
 npm install --legacy-peer-deps
-
-# 3. Configure
-cp .env.example .env
-# Edit .env: set WATCH_PATHS to your project's src directory
-
-# 4. Run (development)
-npm run dev
-
-# 5. Build (production)
 npm run build
-npm start
+
+# 2. Register with Claude Code (run once per project)
+node scripts/setup-claude.js /path/to/your/project
+
+# That's it. Open the project in VS Code — Continuum starts automatically.
+# No WATCH_PATHS. No manual DB config. Fully automatic.
+```
+
+**Adding more projects later:**
+```bash
+node scripts/setup-claude.js /path/to/project1 /path/to/project2
 ```
 
 ---
 
 ## Wire to Claude Code
 
-Create `.vscode/mcp.json` in **your project's root** (not inside continuum/):
+Run the setup script once — it writes a `.mcp.json` to each project root automatically:
 
+```bash
+node /path/to/continuum/scripts/setup-claude.js /path/to/your/project
+```
+
+This creates `.mcp.json` in your project root with `cwd` set to that project. When VS Code opens the project, Claude Code reads this file and spawns Continuum with `cwd = project root`. Continuum then auto-detects the root and starts watching.
+
+**The resulting `.mcp.json` in your project** (written automatically by the setup script):
 ```json
 {
   "mcpServers": {
     "continuum": {
-      "command": "node",
-      "args": ["/absolute/path/to/continuum/dist/mcp/McpServer.js"],
-      "cwd": "/absolute/path/to/continuum",
+      "command": "/path/to/node",
+      "args": ["/path/to/continuum/dist/mcp/McpServer.js"],
+      "cwd": "/your/project/root",
       "env": {
-        "WATCH_PATHS": "${workspaceFolder}/src",
-        "DB_PATH": "/absolute/path/to/continuum/knowledge.db",
-        "LOG_LEVEL": "info"
+        "LOG_LEVEL": "info",
+        "SESSION_RESUME_HOURS": "4"
       }
     }
   }
 }
 ```
 
-For development (no build step):
-```json
-{
-  "mcpServers": {
-    "continuum": {
-      "command": "npx",
-      "args": ["tsx", "src/mcp/McpServer.ts"],
-      "cwd": "/absolute/path/to/continuum"
-    }
-  }
-}
-```
+No `WATCH_PATHS`. No `DB_PATH`. Continuum resolves both from `cwd` automatically.
 
-Reload VS Code (`Cmd+Shift+P` on Mac / `Ctrl+Shift+P` on Windows → Developer: Reload Window). Verify: ask Claude "what tools do you have?" — you should see all 16 Continuum tools.
+**Symbol index location:** `.continuum/knowledge.db` in your project root (auto-gitignored).
+
+Reload VS Code after setup. Verify: ask Claude "call health_check" — you should see `auto_detected: true` and the correct `project_root`.
 
 ---
 
@@ -208,14 +206,18 @@ MYSQL_PASSWORD=mypassword
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `WATCH_PATHS` | `./src` | Comma-separated paths to watch |
-| `WATCH_IGNORE` | _(none)_ | Comma-separated regex patterns to exclude (e.g. `__generated__,migrations/versions`) |
-| `DB_PATH` | `./knowledge.db` | SQLite database location |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| _(none needed)_ | — | **Zero config by default.** Project root and DB path are auto-detected from `cwd`. |
+| `WATCH_PATHS` | _(auto)_ | Override auto-detection. Comma-separated absolute paths to watch. |
+| `PROJECT_ROOT` | _(auto)_ | Explicitly set project root (skips git/package.json walk-up). |
+| `DB_PATH` | `<project>/.continuum/knowledge.db` | Override the per-project DB location. |
+| `WATCH_IGNORE` | _(none)_ | Comma-separated regex patterns to exclude from watching. |
 | `LOG_LEVEL` | `info` | `debug` \| `info` \| `warn` \| `error` |
 | `NODE_ENV` | `development` | Set to `production` for JSON logs |
-| `DB_TYPE` | _(none)_ | `mssql` \| `postgres` \| `mysql` |
-| `SESSION_RESUME_HOURS` | `4` | Resume most recent session if active within N hours. Set to `0` for always-new sessions. |
-| `MAX_TASKS_PER_SESSION` | `15` | Max tasks before oldest are collapsed into a consolidated entry |
+| `DB_TYPE` | _(none)_ | `mssql` \| `postgres` \| `mysql` — enables `get_schema` and `list_tables` |
+| `SESSION_RESUME_HOURS` | `4` | Resume most recent session if active within N hours. `0` = always new. |
+| `MAX_TASKS_PER_SESSION` | `15` | Max tasks before oldest are collapsed into a consolidated entry. |
 
 ---
 
@@ -243,11 +245,12 @@ docker compose up -d
 
 ## How It Works
 
-1. **Startup**: Continuum creates a new session UUID in SQLite and starts watching your configured paths.
+1. **Startup**: Continuum reads `cwd` (set by the per-project `.mcp.json`) and walks up the directory tree to find the project root (`.git`, `package.json`, `*.sln`, etc.). It creates or resumes a session in `.continuum/knowledge.db` inside that root.
 2. **Indexing**: Every file change triggers incremental parsing. The file's MD5 hash is checked — unchanged files are skipped. New symbols are extracted and stored in SQLite with FTS5 indexing.
-3. **Session tracking**: Every file change after the initial scan is recorded as a `touched_file` event (debounced to 5 seconds per path).
+3. **Session tracking**: Every file change after the initial scan is recorded as a `touched_file` event (debounced to 5 seconds per path). The PostToolUse hook captures edits automatically.
 4. **MCP tools**: Your AI assistant calls tools via stdio. `save_task` checkpoints the current goal and decisions; `get_session` recovers them after compaction.
-5. **Schema cache**: `get_schema` fetches live database schema and caches it in SQLite for 1 hour.
+5. **Compaction survival**: The PreCompact hook injects compressed context (goal, decisions, next steps, touched files) before compaction — session state is never lost.
+6. **Schema cache**: `get_schema` fetches live database schema and caches it in SQLite for 1 hour.
 
 ---
 

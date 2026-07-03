@@ -1,8 +1,17 @@
 import BetterSqlite3 from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
+import { resolveDbPath, detectProjectRoot } from '../utils/projectRoot';
 
-const DB_PATH = process.env.DB_PATH || './knowledge.db';
+// Resolve project root and DB path early — before any DB open attempt.
+// Priority: DB_PATH env var > .continuum/knowledge.db in project root > cwd fallback.
+const _projectRoot = process.env.PROJECT_ROOT
+  ? path.resolve(process.env.PROJECT_ROOT)
+  : (process.env.WATCH_PATHS
+      ? path.resolve(process.env.WATCH_PATHS.split(',')[0].trim())
+      : detectProjectRoot(process.cwd()));
+
+const DB_PATH = resolveDbPath(_projectRoot);
 const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
 
 let db: BetterSqlite3.Database | null = null;
