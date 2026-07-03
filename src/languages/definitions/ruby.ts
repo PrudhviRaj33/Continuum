@@ -1,6 +1,6 @@
-import { registerLanguage } from '../LanguageRegistry';
+import type { LanguageDefinition } from '../LanguageRegistry';
 
-registerLanguage({
+const definition: LanguageDefinition = {
   name: 'ruby',
   displayName: 'Ruby',
   extensions: ['.rb', '.rake', '.gemspec'],
@@ -11,4 +11,6 @@ registerLanguage({
     { kind: 'method', pattern: /^\s*def\s+(?:self\.)?([A-Za-z_][A-Za-z0-9_?!]*)/ },
     { kind: 'function', pattern: /^def\s+([A-Za-z_][A-Za-z0-9_?!]*)/ },
   ],
-});
+};
+
+export default definition;

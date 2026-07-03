@@ -2,7 +2,7 @@
 
 **AI Development Memory Layer — Universal Language Support**
 
-> Give your AI coding assistant persistent memory across context windows. Continuum is a local MCP server that watches your codebase, indexes symbols from 14+ languages, tracks your session state, and lets AI assistants resume exactly where they left off — even after context compaction.
+> Give your AI coding assistant persistent memory across context windows. Continuum is a local MCP server that watches your codebase, indexes symbols from 17+ languages, tracks your session state, and lets AI assistants resume exactly where they left off — even after context compaction.
 
 [![CI](https://github.com/yourusername/continuum/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/continuum/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -30,7 +30,7 @@ Your Codebase
      │  (chokidar file watcher)
      ▼
 FileWatcher ──► IncrementalParser ──► SQLite (knowledge.db)
-                  (14 languages)          │
+                  (17 languages)          │
                                     ┌─────┴──────┐
                                     │ Symbols     │
                                     │ Sessions    │
@@ -156,8 +156,13 @@ Create these in your project's `.claude/commands/` folder:
 | Kotlin | `.kt`, `.kts` | class, interface, enum, object, fun |
 | SQL | `.sql` | TABLE, VIEW, PROCEDURE, FUNCTION, TYPE, INDEX |
 | Markdown | `.md`, `.mdx` | H1 (doc), H2 (section), H3 (subsection) |
+| HTML / Angular | `.html`, `.htm` | custom elements, Angular component selectors, `ng-template` refs, template reference variables (`#var`) |
+| CSS | `.css` | class selectors, CSS custom properties (`--token`), `@keyframes`, `@layer` |
+| SCSS / Sass | `.scss`, `.sass` | `@mixin`, `@function`, `$variables`, `%placeholders`, CSS custom properties, `@keyframes`, `@layer`, class selectors |
 
-**Adding a new language:** Create a file in `src/languages/definitions/yourlanguage.ts`, call `registerLanguage()` with your rules, and import it in `LanguageRegistry.ts`. No other changes needed.
+**Angular projects** get first-class support: component selectors (`<app-*>`, `<mat-*>`), named template blocks, and template reference variables are all indexed across `.html`, `.scss`, and `.ts` files. `find_related_files` returns results across all three layers for a single component.
+
+**Adding a new language:** Create a file in `src/languages/definitions/yourlanguage.ts`, export a `LanguageDefinition` as default, and add one `import` + `registerLanguage()` call in `LanguageRegistry.ts`. No other changes needed.
 
 > **Note on parsing accuracy:** Symbol extraction uses regex, which covers the vast majority of real-world code. Highly complex cases — deeply nested generics, multi-line decorators, or unusual macro patterns — may occasionally be missed or partially extracted. AST-based parsing via Tree-sitter is planned for Phase 4 and will resolve these edge cases.
 

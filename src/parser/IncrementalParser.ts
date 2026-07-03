@@ -5,6 +5,23 @@ import { getDb } from '../database/Database';
 import { getLanguageByExtension, LanguageDefinition } from '../languages/LanguageRegistry';
 import { logger } from '../utils/logger';
 
+// Detect UTF-16 BOM and decode accordingly; fall back to UTF-8.
+function decodeFileBuffer(buf: Buffer): string {
+  // UTF-16 LE BOM: FF FE
+  if (buf[0] === 0xff && buf[1] === 0xfe) {
+    return new TextDecoder('utf-16le').decode(buf);
+  }
+  // UTF-16 BE BOM: FE FF
+  if (buf[0] === 0xfe && buf[1] === 0xff) {
+    return new TextDecoder('utf-16be').decode(buf);
+  }
+  // UTF-8 BOM: EF BB BF — strip it
+  if (buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) {
+    return buf.slice(3).toString('utf-8');
+  }
+  return buf.toString('utf-8');
+}
+
 interface ExtractedSymbol {
   name: string;
   kind: string;
@@ -41,9 +58,10 @@ export class IncrementalParser {
         return;
       }
       
-      const content = await fs.readFile(filePath, 'utf-8');
-      const hash = crypto.createHash('md5').update(content).digest('hex');
-      const sizeBytes = Buffer.byteLength(content, 'utf-8');
+      const raw = await fs.readFile(filePath);
+      const content = decodeFileBuffer(raw);
+      const hash = crypto.createHash('md5').update(raw).digest('hex');
+      const sizeBytes = raw.byteLength;
 
       const db = getDb();
 

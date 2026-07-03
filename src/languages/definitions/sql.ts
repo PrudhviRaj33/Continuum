@@ -1,35 +1,70 @@
-import { registerLanguage } from '../LanguageRegistry';
+import type { LanguageDefinition } from '../LanguageRegistry';
 
-registerLanguage({
+// SQL Server uses [Schema].[ObjectName] bracket notation.
+// These patterns handle both bare names and bracket-quoted names,
+// and accept CREATE, CREATE OR ALTER, and ALTER statements.
+const SCHEMA_PREFIX = /(?:\[?\w+\]?\.)?/;
+const OBJECT_NAME = /\[?([A-Za-z_]\w*)\]?/;
+
+const definition: LanguageDefinition = {
   name: 'sql',
   displayName: 'SQL',
   extensions: ['.sql'],
   commentPrefixes: ['--', '/*', '*/'],
   rules: [
+    // TABLE: CREATE TABLE [Schema].[Name] or CREATE TABLE Name
     {
-      kind: 'class', // TABLE
-      pattern: /^CREATE\s+(?:OR\s+REPLACE\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:\w+\.)?([A-Za-z_][A-Za-z0-9_]*)/i,
+      kind: 'class',
+      pattern: new RegExp(
+        `^CREATE\\s+(?:OR\\s+ALTER\\s+)?TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?${SCHEMA_PREFIX.source}${OBJECT_NAME.source}`,
+        'i'
+      ),
     },
+    // VIEW: CREATE [OR ALTER] VIEW / ALTER VIEW
     {
-      kind: 'interface', // VIEW
-      pattern: /^CREATE\s+(?:OR\s+REPLACE\s+)?(?:MATERIALIZED\s+)?VIEW\s+(?:\w+\.)?([A-Za-z_][A-Za-z0-9_]*)/i,
+      kind: 'interface',
+      pattern: new RegExp(
+        `^(?:CREATE(?:\\s+OR\\s+ALTER)?|ALTER)\\s+(?:MATERIALIZED\\s+)?VIEW\\s+${SCHEMA_PREFIX.source}${OBJECT_NAME.source}`,
+        'i'
+      ),
     },
+    // PROCEDURE: CREATE [OR ALTER] PROCEDURE / ALTER PROCEDURE
     {
-      kind: 'function', // PROCEDURE / FUNCTION
-      pattern:
-        /^CREATE\s+(?:OR\s+REPLACE\s+)?(?:PROCEDURE|FUNCTION)\s+(?:\w+\.)?([A-Za-z_][A-Za-z0-9_]*)/i,
+      kind: 'function',
+      pattern: new RegExp(
+        `^(?:CREATE(?:\\s+OR\\s+ALTER)?|ALTER)\\s+PROCEDURE\\s+${SCHEMA_PREFIX.source}${OBJECT_NAME.source}`,
+        'i'
+      ),
     },
+    // FUNCTION: CREATE [OR ALTER] FUNCTION / ALTER FUNCTION
     {
-      kind: 'type', // TYPE
-      pattern: /^CREATE\s+(?:OR\s+REPLACE\s+)?TYPE\s+(?:\w+\.)?([A-Za-z_][A-Za-z0-9_]*)/i,
+      kind: 'function',
+      pattern: new RegExp(
+        `^(?:CREATE(?:\\s+OR\\s+ALTER)?|ALTER)\\s+FUNCTION\\s+${SCHEMA_PREFIX.source}${OBJECT_NAME.source}`,
+        'i'
+      ),
     },
+    // TYPE
     {
-      kind: 'module', // SCHEMA
-      pattern: /^CREATE\s+(?:OR\s+REPLACE\s+)?SCHEMA\s+([A-Za-z_][A-Za-z0-9_]*)/i,
+      kind: 'type',
+      pattern: new RegExp(
+        `^CREATE\\s+(?:OR\\s+ALTER\\s+)?TYPE\\s+${SCHEMA_PREFIX.source}${OBJECT_NAME.source}`,
+        'i'
+      ),
     },
+    // SCHEMA
+    { kind: 'module', pattern: /^CREATE\s+(?:OR\s+ALTER\s+)?SCHEMA\s+\[?([A-Za-z_]\w*)\]?/i },
+    // INDEX
+    { kind: 'enum', pattern: /^CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?\[?([A-Za-z_]\w*)\]?/i },
+    // TRIGGER
     {
-      kind: 'enum', // INDEX
-      pattern: /^CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?([A-Za-z_][A-Za-z0-9_]*)/i,
+      kind: 'method',
+      pattern: new RegExp(
+        `^(?:CREATE(?:\\s+OR\\s+ALTER)?|ALTER)\\s+TRIGGER\\s+${SCHEMA_PREFIX.source}${OBJECT_NAME.source}`,
+        'i'
+      ),
     },
   ],
-});
+};
+
+export default definition;

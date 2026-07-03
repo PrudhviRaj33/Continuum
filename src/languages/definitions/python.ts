@@ -1,6 +1,6 @@
-import { registerLanguage } from '../LanguageRegistry';
+import type { LanguageDefinition } from '../LanguageRegistry';
 
-registerLanguage({
+const definition: LanguageDefinition = {
   name: 'python',
   displayName: 'Python',
   extensions: ['.py', '.pyw'],
@@ -12,4 +12,6 @@ registerLanguage({
     { kind: 'function', pattern: /^async\s+def\s+([A-Za-z_][A-Za-z0-9_]*)/ },
     { kind: 'method', pattern: /^\s{4}async\s+def\s+([A-Za-z_][A-Za-z0-9_]*)/ },
   ],
-});
+};
+
+export default definition;

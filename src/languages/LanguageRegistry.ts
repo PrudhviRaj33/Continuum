@@ -46,13 +46,10 @@ export interface LanguageDefinition {
 }
 
 // ─── Registry ────────────────────────────────────────────────────────────────
-// The Map MUST be declared before any registerLanguage calls.
-// All definitions are inlined here (not imported) to avoid hoisting issues
-// with ES module imports running before the Map is initialized.
 
 const registry = new Map<string, LanguageDefinition>();
 
-/** Register a language definition. Called at module load time. */
+/** Register a language definition. */
 export function registerLanguage(def: LanguageDefinition): void {
   for (const ext of def.extensions) {
     registry.set(ext.toLowerCase(), def);
@@ -83,284 +80,43 @@ export function getAllLanguages(): LanguageDefinition[] {
 }
 
 // ─── Language Definitions ───────────────────────────────────────────────────
-// All definitions registered inline. Adding a new language: append a
-// registerLanguage() call below. No other changes needed.
+// Definition files export plain data objects (no runtime imports from this
+// module), so there is no circular dependency and no hoisting issue.
+// To add a language: create src/languages/definitions/<name>.ts exporting a
+// default LanguageDefinition, then import it and call registerLanguage() below.
 
-registerLanguage({
-  name: 'typescript',
-  displayName: 'TypeScript',
-  extensions: ['.ts', '.tsx'],
-  commentPrefixes: ['//', '/*', '*', '*/'],
-  rules: [
-    { kind: 'class', pattern: /^(?:export\s+)?(?:abstract\s+)?class\s+([A-Za-z_$][A-Za-z0-9_$]*)/ },
-    { kind: 'interface', pattern: /^(?:export\s+)?interface\s+([A-Za-z_$][A-Za-z0-9_$]*)/ },
-    { kind: 'enum', pattern: /^(?:export\s+)?(?:const\s+)?enum\s+([A-Za-z_$][A-Za-z0-9_$]*)/ },
-    { kind: 'type', pattern: /^(?:export\s+)?type\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*[=<]/ },
-    { kind: 'function', pattern: /^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*[(<]/ },
-    { kind: 'method', pattern: /^\s+(?:public|private|protected|static|async|override|\s)*(?:async\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/ },
-    { kind: 'property', pattern: /^\s+(?:public|private|protected|static|readonly|\s)+([A-Za-z_$][A-Za-z0-9_$]*)\s*[=:!?]/ },
-  ],
-});
+import typescriptDef from './definitions/typescript';
+import javascriptDef from './definitions/javascript';
+import pythonDef from './definitions/python';
+import rustDef from './definitions/rust';
+import goDef from './definitions/go';
+import javaDef from './definitions/java';
+import csharpDef from './definitions/csharp';
+import cppDef from './definitions/cpp';
+import rubyDef from './definitions/ruby';
+import phpDef from './definitions/php';
+import swiftDef from './definitions/swift';
+import kotlinDef from './definitions/kotlin';
+import sqlDef from './definitions/sql';
+import markdownDef from './definitions/markdown';
+import htmlDef from './definitions/html';
+import cssDef from './definitions/css';
+import scssDef from './definitions/scss';
 
-registerLanguage({
-  name: 'javascript',
-  displayName: 'JavaScript',
-  extensions: ['.js', '.jsx', '.mjs', '.cjs'],
-  commentPrefixes: ['//', '/*', '*', '*/'],
-  rules: [
-    { kind: 'class', pattern: /^(?:export\s+)?(?:default\s+)?class\s+([A-Za-z_$][A-Za-z0-9_$]*)/ },
-    { kind: 'function', pattern: /^(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+([A-Za-z_$][A-Za-z0-9_$]*)/ },
-    { kind: 'function', pattern: /^(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?:async\s+)?\(/ },
-    { kind: 'method', pattern: /^\s+(?:async\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/ },
-  ],
-});
-
-registerLanguage({
-  name: 'python',
-  displayName: 'Python',
-  extensions: ['.py', '.pyw'],
-  commentPrefixes: ['#'],
-  rules: [
-    { kind: 'class', pattern: /^class\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'function', pattern: /^def\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'method', pattern: /^\s{4}def\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'function', pattern: /^async\s+def\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'method', pattern: /^\s{4}async\s+def\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-  ],
-});
-
-registerLanguage({
-  name: 'rust',
-  displayName: 'Rust',
-  extensions: ['.rs'],
-  commentPrefixes: ['//', '/*', '*', '///'],
-  rules: [
-    { kind: 'struct', pattern: /^(?:pub(?:\([^)]*\))?\s+)?struct\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'enum', pattern: /^(?:pub(?:\([^)]*\))?\s+)?enum\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'trait', pattern: /^(?:pub(?:\([^)]*\))?\s+)?trait\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'module', pattern: /^(?:pub(?:\([^)]*\))?\s+)?mod\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'function', pattern: /^(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'method', pattern: /^\s+(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'type', pattern: /^(?:pub(?:\([^)]*\))?\s+)?type\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-  ],
-});
-
-registerLanguage({
-  name: 'go',
-  displayName: 'Go',
-  extensions: ['.go'],
-  commentPrefixes: ['//', '/*', '*/'],
-  rules: [
-    { kind: 'struct', pattern: /^type\s+([A-Za-z_][A-Za-z0-9_]*)\s+struct/ },
-    { kind: 'interface', pattern: /^type\s+([A-Za-z_][A-Za-z0-9_]*)\s+interface/ },
-    { kind: 'type', pattern: /^type\s+([A-Za-z_][A-Za-z0-9_]*)\s+/ },
-    { kind: 'function', pattern: /^func\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/ },
-    { kind: 'method', pattern: /^func\s+\([^)]+\)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/ },
-  ],
-});
-
-registerLanguage({
-  name: 'java',
-  displayName: 'Java',
-  extensions: ['.java'],
-  commentPrefixes: ['//', '/*', '*', '*/'],
-  rules: [
-    { kind: 'class', pattern: /^(?:public\s+|private\s+|protected\s+)?(?:abstract\s+|final\s+)?class\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'interface', pattern: /^(?:public\s+|private\s+|protected\s+)?interface\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'enum', pattern: /^(?:public\s+|private\s+|protected\s+)?enum\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'method', pattern: /^\s+(?:public|private|protected|static|final|synchronized|abstract|\s)+\s+[A-Za-z<>\[\]?]+\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/ },
-    { kind: 'constructor', pattern: /^\s+(?:public|private|protected)\s+([A-Z][A-Za-z0-9_]*)\s*\(/ },
-  ],
-});
-
-registerLanguage({
-  name: 'csharp',
-  displayName: 'C#',
-  extensions: ['.cs'],
-  commentPrefixes: ['//', '/*', '*', '///'],
-  rules: [
-    { kind: 'class', pattern: /^(?:\s*)(?:public|private|protected|internal|file|\s)*(?:abstract|sealed|static|\s)*class\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'interface', pattern: /^(?:\s*)(?:public|private|protected|internal|\s)*interface\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'enum', pattern: /^(?:\s*)(?:public|private|protected|internal|\s)*enum\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'struct', pattern: /^(?:\s*)(?:public|private|protected|internal|readonly|\s)*(?:record\s+)?struct\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'class', pattern: /^(?:\s*)(?:public|private|protected|internal|\s)*record\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'method', pattern: /^\s+(?:public|private|protected|internal|static|virtual|override|abstract|async|sealed|\s)+[A-Za-z<>\[\]?,\s]+\s+([A-Za-z_][A-Za-z0-9_]*)\s*[\(<]/ },
-    { kind: 'property', pattern: /^\s+(?:public|private|protected|internal|static|virtual|override|\s)+[A-Za-z<>\[\]?,\s]+\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{/ },
-  ],
-});
-
-registerLanguage({
-  name: 'cpp',
-  displayName: 'C/C++',
-  extensions: ['.c', '.cpp', '.cc', '.cxx', '.h', '.hpp', '.hxx'],
-  commentPrefixes: ['//', '/*', '*', '*/'],
-  rules: [
-    { kind: 'class', pattern: /^(?:class|struct)\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'struct', pattern: /^typedef\s+struct\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'enum', pattern: /^(?:enum(?:\s+class)?)\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'function', pattern: /^[A-Za-z_][A-Za-z0-9_:*&\s<>]+\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/ },
-    { kind: 'method', pattern: /^[A-Za-z_][A-Za-z0-9_<>:*&\s]+::([A-Za-z_][A-Za-z0-9_]*)\s*\(/ },
-  ],
-});
-
-registerLanguage({
-  name: 'ruby',
-  displayName: 'Ruby',
-  extensions: ['.rb', '.rake', '.gemspec'],
-  commentPrefixes: ['#'],
-  rules: [
-    { kind: 'class', pattern: /^class\s+([A-Za-z_][A-Za-z0-9_:]*)/ },
-    { kind: 'module', pattern: /^module\s+([A-Za-z_][A-Za-z0-9_:]*)/ },
-    { kind: 'method', pattern: /^\s*def\s+(?:self\.)?([A-Za-z_][A-Za-z0-9_?!]*)/ },
-    { kind: 'function', pattern: /^def\s+([A-Za-z_][A-Za-z0-9_?!]*)/ },
-  ],
-});
-
-registerLanguage({
-  name: 'php',
-  displayName: 'PHP',
-  extensions: ['.php', '.phtml', '.php3', '.php4', '.php5'],
-  commentPrefixes: ['//', '#', '/*', '*', '*/'],
-  rules: [
-    { kind: 'class', pattern: /^(?:abstract\s+|final\s+)?class\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'interface', pattern: /^interface\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'trait', pattern: /^trait\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'enum', pattern: /^enum\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'function', pattern: /^(?:function)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/ },
-    { kind: 'method', pattern: /^\s+(?:public|private|protected|static|abstract|final|\s)*\s*function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/ },
-  ],
-});
-
-registerLanguage({
-  name: 'swift',
-  displayName: 'Swift',
-  extensions: ['.swift'],
-  commentPrefixes: ['//', '/*', '*', '///'],
-  rules: [
-    { kind: 'class', pattern: /^(?:(?:public|private|internal|open|fileprivate)\s+)?(?:final\s+)?class\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'struct', pattern: /^(?:(?:public|private|internal|open|fileprivate)\s+)?struct\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'enum', pattern: /^(?:(?:public|private|internal|open|fileprivate)\s+)?(?:indirect\s+)?enum\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'trait', pattern: /^(?:(?:public|private|internal|open|fileprivate)\s+)?protocol\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'class', pattern: /^extension\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'function', pattern: /^(?:(?:public|private|internal|open|fileprivate|static|class)\s+)*func\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'method', pattern: /^\s+(?:(?:public|private|internal|open|fileprivate|static|class|override|mutating|nonmutating)\s+)*func\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-  ],
-});
-
-registerLanguage({
-  name: 'kotlin',
-  displayName: 'Kotlin',
-  extensions: ['.kt', '.kts'],
-  commentPrefixes: ['//', '/*', '*', '*/'],
-  rules: [
-    { kind: 'class', pattern: /^(?:(?:public|private|internal|protected|open|abstract|sealed|data|inner|value)\s+)*class\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'interface', pattern: /^(?:(?:public|private|internal|protected|sealed)\s+)*(?:fun\s+)?interface\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'enum', pattern: /^(?:(?:public|private|internal|protected)\s+)*enum\s+class\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'class', pattern: /^(?:(?:public|private|internal|protected|companion)\s+)*object\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'function', pattern: /^(?:(?:public|private|internal|protected|inline|suspend|tailrec|operator|infix|external)\s+)*fun\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-    { kind: 'method', pattern: /^\s+(?:(?:public|private|internal|protected|override|inline|suspend|open|final|abstract)\s+)*fun\s+([A-Za-z_][A-Za-z0-9_]*)/ },
-  ],
-});
-
-registerLanguage({
-  name: 'sql',
-  displayName: 'SQL',
-  extensions: ['.sql'],
-  commentPrefixes: ['--', '/*', '*/'],
-  rules: [
-    { kind: 'class', pattern: /^CREATE\s+(?:OR\s+REPLACE\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:\w+\.)?([A-Za-z_][A-Za-z0-9_]*)/i },
-    { kind: 'interface', pattern: /^CREATE\s+(?:OR\s+REPLACE\s+)?(?:MATERIALIZED\s+)?VIEW\s+(?:\w+\.)?([A-Za-z_][A-Za-z0-9_]*)/i },
-    { kind: 'function', pattern: /^CREATE\s+(?:OR\s+REPLACE\s+)?(?:PROCEDURE|FUNCTION)\s+(?:\w+\.)?([A-Za-z_][A-Za-z0-9_]*)/i },
-    { kind: 'type', pattern: /^CREATE\s+(?:OR\s+REPLACE\s+)?TYPE\s+(?:\w+\.)?([A-Za-z_][A-Za-z0-9_]*)/i },
-    { kind: 'module', pattern: /^CREATE\s+(?:OR\s+REPLACE\s+)?SCHEMA\s+([A-Za-z_][A-Za-z0-9_]*)/i },
-    { kind: 'enum', pattern: /^CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?([A-Za-z_][A-Za-z0-9_]*)/i },
-  ],
-});
-
-registerLanguage({
-  name: 'markdown',
-  displayName: 'Markdown',
-  extensions: ['.md', '.mdx', '.markdown'],
-  commentPrefixes: [],
-  rules: [
-    { kind: 'class', pattern: /^#\s+(.+)$/ },
-    { kind: 'module', pattern: /^##\s+(.+)$/ },
-    { kind: 'function', pattern: /^###\s+(.+)$/ },
-  ],
-});
-
-// ── Angular / Web ─────────────────────────────────────────────────────────────
-
-registerLanguage({
-  name: 'html',
-  displayName: 'HTML / Angular Template',
-  extensions: ['.html', '.htm'],
-  commentPrefixes: ['<!--'],
-  rules: [
-    // Custom elements and Angular component selectors (must contain a hyphen)
-    // Matches: <app-header, <mat-button, <my-dialog, <router-outlet
-    {
-      kind: 'class',
-      pattern: /^[ \t]*<([a-z][a-z0-9]*(?:-[a-z0-9]+)+)[\s\/>]/,
-    },
-    // Named ng-template blocks: <ng-template #myTemplate>
-    // Must come after custom-element rule would normally fire, but ng-template
-    // is already caught above — this catches the #name on the same line
-    {
-      kind: 'interface',
-      pattern: /^[ \t]*<ng-template\b[^>]*#([A-Za-z][A-Za-z0-9_]*)/,
-    },
-    // Template reference variables: <input #emailInput> or attribute on its own line
-    // Only fires when line is an attribute line (not a tag opening — those match rule 1)
-    {
-      kind: 'property',
-      pattern: /[\s\(]#([A-Za-z][A-Za-z0-9_]*)[\s>=]/,
-    },
-  ],
-});
-
-registerLanguage({
-  name: 'css',
-  displayName: 'CSS',
-  extensions: ['.css'],
-  commentPrefixes: ['/*', ' *', '*/'],
-  rules: [
-    // @keyframes: @keyframes fadeIn {
-    { kind: 'function', pattern: /^@keyframes\s+([A-Za-z][A-Za-z0-9_-]*)/ },
-    // @layer: @layer utilities {
-    { kind: 'module', pattern: /^@layer\s+([A-Za-z][A-Za-z0-9_.-]*)/ },
-    // CSS custom properties (design tokens): --color-primary: #007bff;
-    { kind: 'property', pattern: /^[ \t]*--([A-Za-z][A-Za-z0-9_-]*)\s*:/ },
-    // Class selectors: .primary-button { or .card:hover { or indented .nested {
-    { kind: 'class', pattern: /^[ \t]*\.([A-Za-z][A-Za-z0-9_-]*)[\s{,:>#\[]/ },
-    // ID selectors: #hero-section {
-    { kind: 'property', pattern: /^#([A-Za-z][A-Za-z0-9_-]*)[\s{,]/ },
-  ],
-});
-
-registerLanguage({
-  name: 'scss',
-  displayName: 'SCSS / Sass',
-  extensions: ['.scss', '.sass'],
-  commentPrefixes: ['/*', ' *', '*/', '//'],
-  rules: [
-    // @mixin: @mixin flex-center($direction: row) {
-    { kind: 'function', pattern: /^@mixin\s+([A-Za-z][A-Za-z0-9_-]*)/ },
-    // @function: @function rem($px) {
-    { kind: 'function', pattern: /^@function\s+([A-Za-z][A-Za-z0-9_-]*)/ },
-    // @keyframes: @keyframes slideIn {
-    { kind: 'function', pattern: /^@keyframes\s+([A-Za-z][A-Za-z0-9_-]*)/ },
-    // @layer: @layer utilities {
-    { kind: 'module', pattern: /^@layer\s+([A-Za-z][A-Za-z0-9_.-]*)/ },
-    // SCSS variables: $brand-primary: #007bff;
-    { kind: 'property', pattern: /^\$([A-Za-z][A-Za-z0-9_-]*)\s*:/ },
-    // CSS custom properties: --color-primary: #007bff;
-    { kind: 'property', pattern: /^[ \t]*--([A-Za-z][A-Za-z0-9_-]*)\s*:/ },
-    // Placeholder selectors: %clearfix {
-    { kind: 'type', pattern: /^%([A-Za-z][A-Za-z0-9_-]*)\s*\{/ },
-    // Class selectors: .primary-button { or .card:hover { or indented .nested {
-    { kind: 'class', pattern: /^[ \t]*\.([A-Za-z][A-Za-z0-9_-]*)[\s{,:>#\[]/ },
-    // ID selectors: #hero-section {
-    { kind: 'property', pattern: /^#([A-Za-z][A-Za-z0-9_-]*)[\s{,]/ },
-  ],
-});
+registerLanguage(typescriptDef);
+registerLanguage(javascriptDef);
+registerLanguage(pythonDef);
+registerLanguage(rustDef);
+registerLanguage(goDef);
+registerLanguage(javaDef);
+registerLanguage(csharpDef);
+registerLanguage(cppDef);
+registerLanguage(rubyDef);
+registerLanguage(phpDef);
+registerLanguage(swiftDef);
+registerLanguage(kotlinDef);
+registerLanguage(sqlDef);
+registerLanguage(markdownDef);
+registerLanguage(htmlDef);
+registerLanguage(cssDef);
+registerLanguage(scssDef);
