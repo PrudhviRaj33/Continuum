@@ -121,3 +121,78 @@ Then run the setup script again.
 **Continuum watching the wrong folders**
 - Run the setup script again with the correct project paths
 - The `WATCH_PATHS` env var accepts comma-separated absolute paths
+
+---
+
+## Hooks Setup — Surviving Context Compaction
+
+Continuum ships four Claude Code hooks that dramatically improve memory continuity.
+Wire them in your project's `.claude/settings.json` (create if it doesn't exist):
+
+```json
+{
+  "hooks": {
+    "PreCompact": [
+      {
+        "hooks": [{
+          "type": "command",
+          "command": "node /absolute/path/to/Continuum/scripts/hooks/pre-compact.js",
+          "timeout": 5000
+        }]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [{
+          "type": "command",
+          "command": "node /absolute/path/to/Continuum/scripts/hooks/stop.js",
+          "timeout": 10000
+        }]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "",
+        "hooks": [{
+          "type": "command",
+          "command": "node /absolute/path/to/Continuum/scripts/hooks/post-tool-use.js",
+          "timeout": 3000
+        }]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "",
+        "hooks": [{
+          "type": "command",
+          "command": "node /absolute/path/to/Continuum/scripts/hooks/post-tool-failure.js",
+          "timeout": 3000
+        }]
+      }
+    ]
+  }
+}
+```
+
+Replace `/absolute/path/to/Continuum` with the actual path from `pwd` in your Continuum directory.
+
+Also set the `DB_PATH` env var so hooks find the same database as the MCP server:
+
+```bash
+export DB_PATH="/absolute/path/to/Continuum/knowledge.db"
+```
+
+Or add it to each hook command:
+
+```json
+"command": "DB_PATH=/path/to/knowledge.db node /path/to/Continuum/scripts/hooks/pre-compact.js"
+```
+
+### What each hook does
+
+| Hook | Script | What it does |
+|------|--------|--------------|
+| `PreCompact` | `pre-compact.js` | Injects compressed session context **before** compaction — context survives |
+| `Stop` | `stop.js` | Consolidates session on close — appears in `get_recent_sessions` summaries |
+| `PostToolUse` | `post-tool-use.js` | Auto-records file edits into `touched_files` without needing `save_task` |
+| `PostToolUseFailure` | `post-tool-failure.js` | Captures tool errors — surfaces in `get_session` as `recent_errors` |

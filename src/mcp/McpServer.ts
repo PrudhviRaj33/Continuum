@@ -408,6 +408,101 @@ server.tool(
   }
 );
 
+// ── Tool 14: smart_search ─────────────────────────────────────────────────
+// @ts-ignore
+server.tool(
+  'smart_search',
+  'Search everything at once — symbols, session tasks, and touched files — with one query. ' +
+  'Use this as your first lookup before calling more targeted tools like search_symbols.',
+  {
+    query: z.string().describe('What to search for — function name, feature, concept, or file path fragment'),
+    limit: z.number().int().min(1).max(50).optional().default(20).describe('Max symbol results'),
+  },
+  async (input) => {
+    const start = Date.now();
+
+    const [symbols, taskMatches, fileMatches] = await Promise.all([
+      Promise.resolve(knowledge.searchSymbols(input.query, input.limit)),
+      Promise.resolve(session.searchTasks(input.query)),
+      Promise.resolve(session.searchTouchedFiles(input.query)),
+    ]);
+
+    const result = JSON.stringify({
+      query: input.query,
+      symbols:        { count: symbols.length,    results: symbols },
+      relevant_tasks: { count: taskMatches.length, results: taskMatches },
+      touched_files:  { count: fileMatches.length, results: fileMatches },
+    }, null, 2);
+
+    logToolCall('smart_search', input, result, Date.now() - start);
+    return { content: [{ type: 'text', text: result }] };
+  }
+);
+
+// ── Tool 15: enrich_context ───────────────────────────────────────────────
+server.tool(
+  'enrich_context',
+  'Get the full picture for a file before editing it — symbols defined inside it, ' +
+  'other files that import it, and recent session activity. ' +
+  'Reduces the need to read the file from scratch.',
+  {
+    file_path: z.string().describe('Partial or full path of the file to enrich'),
+  },
+  async (input) => {
+    const start = Date.now();
+    const db = getDb();
+
+    const symbols = knowledge.getFileSummary(input.file_path);
+
+    const importedBy = db.prepare(`
+      SELECT DISTINCT f.path, f.language
+      FROM relationships r
+      JOIN symbols s ON r.from_id = s.id
+      JOIN files f ON s.file_id = f.id
+      WHERE r.to_file LIKE ? AND r.kind = 'imports'
+      LIMIT 20
+    `).all(`%${input.file_path.replace(/\.[^.]+$/, '')}%`) as { path: string; language: string }[];
+
+    const recentActivity = db.prepare(`
+      SELECT action, MAX(touched_at) AS touched_at FROM touched_files
+      WHERE session_id = ? AND path LIKE ?
+      ORDER BY touched_at DESC LIMIT 5
+    `).all(session.getSessionId(), `%${input.file_path}%`) as { action: string; touched_at: number }[];
+
+    const result = JSON.stringify({
+      file:            input.file_path,
+      symbols:         symbols ?? null,
+      imported_by:     importedBy,
+      recent_activity: recentActivity,
+    }, null, 2);
+
+    logToolCall('enrich_context', input, result, Date.now() - start);
+    return { content: [{ type: 'text', text: result }] };
+  }
+);
+
+// ── Tool 16: list_tables ──────────────────────────────────────────────────
+server.tool(
+  'list_tables',
+  'List all tables available in the connected external database. ' +
+  'Use before get_schema to discover table names without guessing.',
+  {},
+  async () => {
+    const start = Date.now();
+
+    if (!schema.isEnabled()) {
+      const result = JSON.stringify({ error: 'Schema reader not configured. Set DB_TYPE and connection env vars.' });
+      logToolCall('list_tables', {}, result, 0);
+      return { content: [{ type: 'text', text: result }] };
+    }
+
+    const tables = await schema.listTables();
+    const result = JSON.stringify({ count: tables.length, tables }, null, 2);
+    logToolCall('list_tables', {}, result, Date.now() - start);
+    return { content: [{ type: 'text', text: result }] };
+  }
+);
+
 // ── Start ──────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -425,6 +520,7 @@ main().catch((err) => {
 
 function shutdown(signal: string): void {
   logger.info({ signal }, 'Shutting down gracefully');
+  try { session.consolidateSession(); } catch { /* non-critical */ }
   watcher.stop();
   closeDb();
   process.exit(0);

@@ -39,7 +39,7 @@ FileWatcher ──► IncrementalParser ──► SQLite (knowledge.db)
                                     └─────┬───────┘
                                           │
                                     McpServer (stdio)
-                                    10 MCP Tools
+                                    16 MCP Tools
                                           │
                               Claude Code / Cursor / Copilot
 ```
@@ -104,7 +104,7 @@ For development (no build step):
 }
 ```
 
-Reload VS Code (`Cmd+Shift+P` on Mac / `Ctrl+Shift+P` on Windows → Developer: Reload Window). Verify: ask Claude "what tools do you have?" — you should see all 12 Continuum tools.
+Reload VS Code (`Cmd+Shift+P` on Mac / `Ctrl+Shift+P` on Windows → Developer: Reload Window). Verify: ask Claude "what tools do you have?" — you should see all 16 Continuum tools.
 
 ---
 
@@ -125,6 +125,9 @@ Reload VS Code (`Cmd+Shift+P` on Mac / `Ctrl+Shift+P` on Windows → Developer: 
 | `list_languages` | 🌍 All supported languages with indexed file/symbol counts |
 | `get_session_report` | 📊 Session metrics: tool calls, files touched, actual tokens returned |
 | `health_check` | 🩺 Server health, uptime, DB status |
+| `smart_search` | ⚡ Unified search — symbols + session tasks + touched files in one query |
+| `enrich_context` | 🔬 Full picture for a file — symbols inside, files that import it, recent activity |
+| `list_tables` | 📋 List all tables in connected external database (requires DB_TYPE) |
 
 ---
 
@@ -211,6 +214,8 @@ MYSQL_PASSWORD=mypassword
 | `LOG_LEVEL` | `info` | `debug` \| `info` \| `warn` \| `error` |
 | `NODE_ENV` | `development` | Set to `production` for JSON logs |
 | `DB_TYPE` | _(none)_ | `mssql` \| `postgres` \| `mysql` |
+| `SESSION_RESUME_HOURS` | `4` | Resume most recent session if active within N hours. Set to `0` for always-new sessions. |
+| `MAX_TASKS_PER_SESSION` | `15` | Max tasks before oldest are collapsed into a consolidated entry |
 
 ---
 

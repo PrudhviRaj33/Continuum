@@ -100,6 +100,32 @@ CREATE TABLE IF NOT EXISTS schema_cache (
   cached_at   INTEGER DEFAULT (unixepoch())
 );
 
+-- Consolidated session summaries written by the Stop hook on session end
+CREATE TABLE IF NOT EXISTS session_summaries (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id    TEXT    NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  goal          TEXT,
+  key_decisions TEXT,   -- JSON array, max 10 items
+  resume_steps  TEXT,   -- JSON array, max 3 items
+  files_count   INTEGER DEFAULT 0,
+  task_count    INTEGER DEFAULT 0,
+  created_at    INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_summaries_session ON session_summaries(session_id);
+
+-- Tool errors captured by PostToolFailure hook
+CREATE TABLE IF NOT EXISTS tool_errors (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id  TEXT    NOT NULL,
+  tool_name   TEXT    NOT NULL,
+  input_json  TEXT,
+  error_msg   TEXT,
+  occurred_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+CREATE INDEX IF NOT EXISTS idx_tool_errors_session ON tool_errors(session_id, occurred_at);
+
 -- Every MCP tool call logged for observability
 CREATE TABLE IF NOT EXISTS tool_usage (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,

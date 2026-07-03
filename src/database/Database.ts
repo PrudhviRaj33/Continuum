@@ -24,6 +24,38 @@ function applyPragmasAndSchema(instance: BetterSqlite3.Database): void {
 function runMigrations(instance: BetterSqlite3.Database): void {
   // Add to_file column to relationships for storing the import module path
   try { instance.exec(`ALTER TABLE relationships ADD COLUMN to_file TEXT`); } catch { /* already exists */ }
+
+  // session_summaries — written by Stop hook on session end
+  try {
+    instance.exec(`
+      CREATE TABLE IF NOT EXISTS session_summaries (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id    TEXT    NOT NULL,
+        goal          TEXT,
+        key_decisions TEXT,
+        resume_steps  TEXT,
+        files_count   INTEGER DEFAULT 0,
+        task_count    INTEGER DEFAULT 0,
+        created_at    INTEGER NOT NULL DEFAULT (unixepoch())
+      )
+    `);
+    instance.exec(`CREATE INDEX IF NOT EXISTS idx_session_summaries_session ON session_summaries(session_id)`);
+  } catch { /* already exists */ }
+
+  // tool_errors — written by PostToolFailure hook
+  try {
+    instance.exec(`
+      CREATE TABLE IF NOT EXISTS tool_errors (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id  TEXT    NOT NULL,
+        tool_name   TEXT    NOT NULL,
+        input_json  TEXT,
+        error_msg   TEXT,
+        occurred_at INTEGER NOT NULL DEFAULT (unixepoch())
+      )
+    `);
+    instance.exec(`CREATE INDEX IF NOT EXISTS idx_tool_errors_session ON tool_errors(session_id, occurred_at)`);
+  } catch { /* already exists */ }
 }
 
 function seedMetadata(instance: BetterSqlite3.Database): void {
