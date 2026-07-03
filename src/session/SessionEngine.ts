@@ -22,6 +22,7 @@ export interface SessionState {
   compaction_count: number;
   touched_files: TouchedFile[];
   latest_task: TaskState | null;
+  recent_tasks: TaskState[];
 }
 
 export class SessionEngine {
@@ -139,21 +140,23 @@ export class SessionEngine {
       `)
       .all(this.sessionId) as TouchedFile[];
 
-    const latestTask = db
+    type RawTask = { goal: string; decisions: string; next_steps: string; open_questions: string; saved_at: number };
+    const parseTask = (t: RawTask): TaskState => ({
+      goal: t.goal,
+      decisions: JSON.parse(t.decisions || '[]') as string[],
+      next_steps: JSON.parse(t.next_steps || '[]') as string[],
+      open_questions: JSON.parse(t.open_questions || '[]') as string[],
+    });
+
+    const recentTasks = (db
       .prepare(`
-        SELECT * FROM tasks
+        SELECT goal, decisions, next_steps, open_questions, saved_at
+        FROM tasks
         WHERE session_id = ?
         ORDER BY saved_at DESC
-        LIMIT 1
+        LIMIT 5
       `)
-      .get(this.sessionId) as
-      | {
-          goal: string;
-          decisions: string;
-          next_steps: string;
-          open_questions: string;
-        }
-      | undefined;
+      .all(this.sessionId) as RawTask[]).map(parseTask);
 
     return {
       session_id: session.id,
@@ -161,14 +164,8 @@ export class SessionEngine {
       started_at: session.started_at,
       compaction_count: session.compaction_count,
       touched_files: touched,
-      latest_task: latestTask
-        ? {
-            goal: latestTask.goal,
-            decisions: JSON.parse(latestTask.decisions || '[]') as string[],
-            next_steps: JSON.parse(latestTask.next_steps || '[]') as string[],
-            open_questions: JSON.parse(latestTask.open_questions || '[]') as string[],
-          }
-        : null,
+      latest_task: recentTasks[0] ?? null,
+      recent_tasks: recentTasks,
     };
   }
 

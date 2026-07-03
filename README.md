@@ -104,7 +104,7 @@ For development (no build step):
 }
 ```
 
-Reload VS Code (`Cmd+Shift+P` on Mac / `Ctrl+Shift+P` on Windows → Developer: Reload Window). Verify: ask Claude "what tools do you have?" — you should see all 10 Continuum tools.
+Reload VS Code (`Cmd+Shift+P` on Mac / `Ctrl+Shift+P` on Windows → Developer: Reload Window). Verify: ask Claude "what tools do you have?" — you should see all 12 Continuum tools.
 
 ---
 
@@ -112,11 +112,13 @@ Reload VS Code (`Cmd+Shift+P` on Mac / `Ctrl+Shift+P` on Windows → Developer: 
 
 | Tool | Description |
 |------|-------------|
-| `get_session` | 🔄 **Core recovery tool.** Get full session state — call after any context compaction |
+| `get_session` | 🔄 **Core recovery tool.** Full session state including last 5 saved tasks — call after any context compaction |
 | `save_task` | 💾 Save structured task state (goal, decisions, next steps, open questions) |
 | `get_touched_files` | 📁 Files modified/created/deleted this session |
 | `find_related_files` | 🔍 Cross-layer search for symbols, features, and files |
 | `search_symbols` | 🔎 Full-text search all indexed symbols (FTS5) |
+| `get_file_symbols` | 📄 All symbols in a specific file, grouped by kind — accepts partial paths |
+| `reindex` | ♻️ Force re-parse one file or all files, ignoring cached hashes |
 | `get_schema` | 🗄️ Live DB schema for a table (MSSQL/PostgreSQL/MySQL, cached 1h) |
 | `get_dependencies` | 🕸️ Symbols defined in a file + outgoing relationships (relationship graph populated in Phase 4) |
 | `list_languages` | 🌍 All supported languages with indexed file/symbol counts |

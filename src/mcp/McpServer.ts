@@ -282,7 +282,54 @@ server.tool(
   }
 );
 
-// ── Tool 9: list_languages ─────────────────────────────────────────────────
+// ── Tool 9: get_file_symbols ───────────────────────────────────────────────
+server.tool(
+  'get_file_symbols',
+  'Get all symbols defined in a specific file, grouped by kind (class, function, method, etc.). ' +
+  'Accepts a partial path — e.g. "AuthService" matches "src/auth/AuthService.ts".',
+  {
+    file_path: z.string().describe('Partial or full path to the file'),
+  },
+  async (input) => {
+    const start = Date.now();
+    const summary = knowledge.getFileSummary(input.file_path);
+
+    if (!summary) {
+      const result = JSON.stringify({ error: `File not found in index: "${input.file_path}". Check WATCH_PATHS or run reindex.` });
+      logToolCall('get_file_symbols', input, result, Date.now() - start);
+      return { content: [{ type: 'text', text: result }] };
+    }
+
+    const result = JSON.stringify(summary, null, 2);
+    logToolCall('get_file_symbols', input, result, Date.now() - start);
+    return { content: [{ type: 'text', text: result }] };
+  }
+);
+
+// ── Tool 10: reindex ───────────────────────────────────────────────────────
+server.tool(
+  'reindex',
+  'Force re-parse one file or all watched files, ignoring cached hashes. ' +
+  'Use when symbols are missing or stale after a large refactor. ' +
+  'Omit file_path to reindex everything (may take a few seconds for large codebases).',
+  {
+    file_path: z.string().optional().describe('Specific file to reindex. Omit to reindex all files.'),
+  },
+  async (input) => {
+    const start = Date.now();
+    const count = await watcher.reindex(input.file_path);
+    const result = JSON.stringify({
+      queued: count,
+      message: input.file_path
+        ? `Reindexed: ${input.file_path}`
+        : `${count} files queued for reindexing`,
+    });
+    logToolCall('reindex', input, result, Date.now() - start);
+    return { content: [{ type: 'text', text: result }] };
+  }
+);
+
+// ── Tool 11: list_languages ─────────────────────────────────────────────────
 server.tool(
   'list_languages',
   'List all programming languages that Continuum supports, with file and symbol counts ' +
@@ -308,7 +355,7 @@ server.tool(
   }
 );
 
-// ── Tool 10: health_check ──────────────────────────────────────────────────
+// ── Tool 12: health_check ──────────────────────────────────────────────────
 server.tool(
   'health_check',
   'Check Continuum server health — uptime, database status, indexed file count, active session.',

@@ -167,6 +167,40 @@ export class FileWatcher {
     }
   }
 
+  /**
+   * Force reindex one file or all watched files by resetting their stored hash.
+   * Returns the count of files queued for re-parsing.
+   */
+  async reindex(filePath?: string): Promise<number> {
+    const { getDb } = require('../database/Database') as typeof import('../database/Database');
+    const db = getDb();
+
+    if (filePath) {
+      // Single file: reset hash and re-parse immediately
+      db.prepare("UPDATE files SET hash = 'force-reindex' WHERE path = ?").run(filePath);
+      await this.parser.parseFile(filePath);
+      logger.info({ filePath }, 'Force reindexed single file');
+      return 1;
+    }
+
+    // All files: reset hashes and re-enqueue via watcher paths
+    const result = db.prepare("UPDATE files SET hash = 'force-reindex'").run();
+    const count = result.changes;
+
+    // Re-enqueue all tracked files for parsing
+    const files = db
+      .prepare('SELECT path FROM files')
+      .all() as { path: string }[];
+
+    for (const f of files) {
+      this.pendingParseQueue.add(f.path);
+    }
+    this.scheduleQueue();
+
+    logger.info({ count }, 'Force reindex queued for all files');
+    return count;
+  }
+
   stop(): void {
     if (this.watcher) {
       this.watcher.close().catch(() => {});
