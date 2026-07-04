@@ -88,6 +88,7 @@ function checkHooks(projectRoot: string): StatusReport['hooks'] {
     { event: 'Stop',               script: 'stop.js' },
     { event: 'PostToolUse',        script: 'post-tool-use.js' },
     { event: 'PostToolUseFailure', script: 'post-tool-failure.js' },
+    { event: 'SessionStart',       script: 'session-start.js' },
   ];
 
   let settings: { hooks?: Record<string, { hooks?: { command?: string }[] }[]> } = {};

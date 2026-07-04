@@ -41,7 +41,7 @@ FileWatcher ──► IncrementalParser ──► SQLite (knowledge.db)
                                     └─────┬───────┘
                                           │
                                     McpServer (stdio)
-                                    16 MCP Tools
+                                    17 MCP Tools + 5 Hooks
                                           │
                               Claude Code / Cursor / Copilot
 ```
@@ -57,16 +57,23 @@ cd continuum
 npm install --legacy-peer-deps
 npm run build
 
-# 2. Register with Claude Code (run once per project)
-node scripts/setup-claude.js /path/to/your/project
-
-# That's it. Open the project in VS Code — Continuum starts automatically.
-# No WATCH_PATHS. No manual DB config. Fully automatic.
+# 2. Run inside YOUR project — sets up everything in one shot
+cd /path/to/your/project
+node /path/to/continuum/dist/cli/index.js init
 ```
 
-**Adding more projects later:**
+`init` auto-detects your project root, writes `.mcp.json`, wires all 5 hooks
+into `.claude/settings.json` (non-destructively — your existing hooks and
+settings are preserved), and updates `.gitignore`. It's idempotent — safe to
+run again any time (e.g. after upgrading Continuum).
+
+Open the project in your editor — Continuum starts automatically. No
+`WATCH_PATHS`, no manual DB config, no AI cooperation required for the core
+memory features (they run from hooks, not tool calls).
+
+**Check it worked:**
 ```bash
-node scripts/setup-claude.js /path/to/project1 /path/to/project2
+node /path/to/continuum/dist/cli/index.js status
 ```
 
 ---
@@ -126,6 +133,30 @@ Reload VS Code after setup. Verify: ask Claude "call health_check" — you shoul
 | `smart_search` | ⚡ Unified search — symbols + session tasks + touched files in one query |
 | `enrich_context` | 🔬 Full picture for a file — symbols inside, files that import it, recent activity |
 | `list_tables` | 📋 List all tables in connected external database (requires DB_TYPE) |
+| `get_project_context` | 🧠 Distilled long-lived project memory — active work, decisions, gotchas, accumulated across all past sessions |
+
+---
+
+## Hooks — Memory With Zero AI Cooperation
+
+`continuum init` wires 5 Claude Code hooks that make Continuum's core memory
+features automatic — they run regardless of whether the AI decides to call a
+tool:
+
+| Hook | Fires when | What it does |
+|------|-----------|--------------|
+| `PreCompact` | Context is about to be compacted | Injects the session's goal, decisions, and touched files so they survive compaction |
+| `Stop` | Session ends | Consolidates the session into `session_summaries` and regenerates `context.md` |
+| `PostToolUse` | Edit/Write/Bash/MultiEdit runs | Auto-records the touched file — no `save_task` needed |
+| `PostToolUseFailure` | A tool call fails | Captures the error into `tool_errors`, surfaced in `get_session` |
+| `SessionStart` | A new session begins | Injects `context.md` (distilled project memory) into the starting context |
+
+**`.continuum/context.md`** is a human-readable, per-machine memory file —
+Active Work, Decisions, Open Questions, Recently Active Areas — regenerated
+deterministically (no LLM) by the Stop hook from accumulated session history.
+It's gitignored and never committed: this is personal, local memory, not a
+team artifact. Sections you mark `## Heading @manual` are preserved verbatim
+across regenerations, so you can hand-edit it freely.
 
 ---
 

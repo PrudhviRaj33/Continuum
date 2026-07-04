@@ -64,6 +64,13 @@ async function main() {
       tasks.length
     );
 
+    // Regenerate the local context.md (human-readable memory) next to the DB.
+    // Reuses the built generator — no duplicated markdown logic in this hook.
+    try {
+      const { generateContextMd } = require(path.join(__dirname, '..', '..', 'dist', 'session', 'ContextGenerator.js'));
+      generateContextMd(db, path.dirname(DB_PATH));
+    } catch { /* dist not built or dir read-only — non-fatal */ }
+
     db.close();
   } catch (err) {
     process.stderr.write(`[Continuum] stop hook error: ${err.message}\n`);

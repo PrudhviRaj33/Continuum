@@ -104,6 +104,7 @@ function initCommand(): void {
     { event: 'Stop',               script: 'stop.js',              timeout: 10000 },
     { event: 'PostToolUse',        script: 'post-tool-use.js',     timeout: 3000, matcher: '' },
     { event: 'PostToolUseFailure', script: 'post-tool-failure.js', timeout: 3000, matcher: '' },
+    { event: 'SessionStart',       script: 'session-start.js',     timeout: 3000 },
   ];
 
   let wired = 0;
@@ -129,7 +130,7 @@ function initCommand(): void {
     wired++;
   }
   writeJson(settingsFile, settings);
-  if (wired > 0) ok(`.claude/settings.json — ${wired} hook(s) wired (PreCompact, Stop, PostToolUse, PostToolUseFailure)`);
+  if (wired > 0) ok(`.claude/settings.json — ${wired} hook(s) wired (PreCompact, Stop, PostToolUse, PostToolUseFailure, SessionStart)`);
   if (already > 0) info(`${already} hook(s) were already wired — left untouched`);
 
   // 4. .gitignore — keep .continuum/ (per-project DB) out of the repo

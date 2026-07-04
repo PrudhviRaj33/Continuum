@@ -1,7 +1,9 @@
 import BetterSqlite3 from 'better-sqlite3';
+import * as path from 'path';
 import { getDb } from '../database/Database';
 import { randomUUID } from 'crypto';
 import { logger } from '../utils/logger';
+import { generateContextMd } from './ContextGenerator';
 
 export interface TaskState {
   goal: string;
@@ -371,6 +373,13 @@ export class SessionEngine {
       filesCount,
       tasks.length
     );
+
+    // Regenerate the human-readable context.md next to the DB. Local-only,
+    // gitignored — the distilled memory a fresh session (or the user) reads.
+    try {
+      const dbFile = (db as unknown as { name: string }).name;
+      if (dbFile) generateContextMd(db, path.dirname(dbFile));
+    } catch { /* non-fatal — DB remains the source of truth */ }
 
     logger.info({ sessionId: this.sessionId, tasks: tasks.length, files: filesCount }, 'Session consolidated');
   }

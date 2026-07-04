@@ -8,7 +8,10 @@ import { KnowledgeEngine } from '../knowledge/KnowledgeEngine';
 import { SchemaReader } from '../schema/SchemaReader';
 import { getDb, closeDb } from '../database/Database';
 import { resolveWatchPaths, detectProjectRoot } from '../utils/projectRoot';
+import { generateContextMd } from '../session/ContextGenerator';
 import { logger } from '../utils/logger';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // Environment variables are injected by the MCP client (IDE) or Docker.
 // We explicitly do NOT use dotenv here to prevent `dotenvx` from polluting stdout.
@@ -510,6 +513,41 @@ server.tool(
     const tables = await schema.listTables();
     const result = JSON.stringify({ count: tables.length, tables }, null, 2);
     logToolCall('list_tables', {}, result, Date.now() - start);
+    return { content: [{ type: 'text', text: result }] };
+  }
+);
+
+// ── Tool 17: get_project_context ──────────────────────────────────────────
+server.tool(
+  'get_project_context',
+  'Get the distilled project memory (context.md) — active work, accumulated decisions, ' +
+  'open questions, and recently active areas across all past sessions. ' +
+  'Call at the start of a session for long-lived context beyond the current session state.',
+  {},
+  async () => {
+    const start = Date.now();
+    const db = getDb();
+
+    const dbFile = (db as unknown as { name: string }).name;
+    const contextDir = path.dirname(dbFile);
+    const contextPath = path.join(contextDir, 'context.md');
+
+    let content: string | null = null;
+    try {
+      content = fs.readFileSync(contextPath, 'utf8');
+    } catch {
+      // Not generated yet — build it on the fly from whatever exists
+      const written = generateContextMd(db, contextDir);
+      if (written) {
+        try { content = fs.readFileSync(written, 'utf8'); } catch { /* ignore */ }
+      }
+    }
+
+    const result = content
+      ? JSON.stringify({ path: contextPath, content }, null, 2)
+      : JSON.stringify({ error: 'No project context yet — save tasks with save_task and it accumulates across sessions.' });
+
+    logToolCall('get_project_context', {}, result, Date.now() - start);
     return { content: [{ type: 'text', text: result }] };
   }
 );
