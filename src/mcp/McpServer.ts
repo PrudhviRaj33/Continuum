@@ -316,6 +316,7 @@ server.tool(
 );
 
 // ── Tool 10: reindex ───────────────────────────────────────────────────────
+// @ts-expect-error TS2589 — MCP SDK deep Zod inference hits TS depth limit; runtime is correct
 server.tool(
   'reindex',
   'Force re-parse one file or all watched files, ignoring cached hashes. ' +

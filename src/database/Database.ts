@@ -44,6 +44,10 @@ function runMigrations(instance: BetterSqlite3.Database): void {
   // Add to_file column to relationships for storing the import module path
   try { instance.exec(`ALTER TABLE relationships ADD COLUMN to_file TEXT`); } catch { /* already exists */ }
 
+  // Add parser column to files to track which extractor produced the symbols
+  // 'regex' (default) | 'treesitter' — enables mixed-index visibility in status/reindex
+  try { instance.exec(`ALTER TABLE files ADD COLUMN parser TEXT DEFAULT 'regex'`); } catch { /* already exists */ }
+
   migrateContentlessFts(instance);
 
   // session_summaries — written by Stop hook on session end

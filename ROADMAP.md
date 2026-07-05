@@ -12,6 +12,7 @@ Continuum is a **personal, local developer tool**. Its two moats:
 ## Shipped
 
 ### v1.1 (July 2026)
+- **Tree-sitter behind a flag** — `PARSER=treesitter` activates WASM-based AST extraction via `web-tree-sitter` (no node-gyp). Regex stays the zero-dep default. Supported: TypeScript/JavaScript, Python, C#, Java, Go. Delivers: no false-positive symbols, exact end lines, real signatures. Per-file `parser` field records which extractor was used; `reindex` upgrades an existing regex index to tree-sitter in one step. Graceful fallback to regex if WASM is unavailable (optional deps not installed).
 - **`continuum init` — one-command installer** — auto-detects project root, writes `.mcp.json` (no `WATCH_PATHS`/`DB_PATH` needed), wires all 5 hooks into `.claude/settings.json` via non-destructive merge, updates `.gitignore`. Idempotent. Replaced the old CLI `init` that wrote deprecated per-`.env` config.
 - **`continuum status`** — read-only CLI: project root + detection marker, DB size/integrity (`PRAGMA integrity_check`), server liveness (pid filtered to this project via `lsof` cwd match), session state, per-language index counts with FTS-drift warning, hook wiring check. `--json` for scripting.
 - **Local `context.md`** — human-readable memory file in `.continuum/` (gitignored, personal/local only): Active Work / Decisions / Open Questions / Recently Active Areas, regenerated deterministically by the Stop hook from `session_summaries`. `## Heading @manual` sections preserved verbatim across regeneration. New `get_project_context` MCP tool + `SessionStart` hook injection (capped ~1500 tokens) so fresh sessions start with distilled project memory automatically.
@@ -40,12 +41,7 @@ Continuum is a **personal, local developer tool**. Its two moats:
 
 ## Next (committed, in order)
 
-1. **Tree-sitter behind a flag** (~1 week)
-   `PARSER=treesitter` via `web-tree-sitter` (WASM — no node-gyp). Regex stays the
-   zero-dep default. Top 5 languages first: TypeScript/JavaScript, Python, C#,
-   Java, Go. Delivers: no false-positive symbols (no more `$`), exact end lines,
-   real signatures, class↔method nesting. Per-file `parser` field so mixed
-   indexes are visible; `reindex` upgrades an existing index.
+No committed items — all planned work is in the backlog below.
 
 ---
 

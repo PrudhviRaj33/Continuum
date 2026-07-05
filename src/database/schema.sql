@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS files (
   hash         TEXT,                 -- MD5 of file content for dedup
   size_bytes   INTEGER,
   symbol_count INTEGER DEFAULT 0,
+  parser       TEXT    DEFAULT 'regex', -- 'regex' | 'treesitter' — which extractor was used
   created_at   INTEGER DEFAULT (unixepoch()),
   updated_at   INTEGER DEFAULT (unixepoch())
 );

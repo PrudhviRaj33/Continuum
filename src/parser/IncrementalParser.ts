@@ -4,6 +4,12 @@ import * as crypto from 'crypto';
 import { getDb } from '../database/Database';
 import { getLanguageByExtension, LanguageDefinition } from '../languages/LanguageRegistry';
 import { logger } from '../utils/logger';
+import {
+  extractWithTreeSitter,
+  isTreeSitterEnabled,
+  treeSitterExtensions,
+  type ExtractedSymbol,
+} from './TreeSitterExtractor';
 
 // Detect UTF-16 BOM and decode accordingly; fall back to UTF-8.
 function decodeFileBuffer(buf: Buffer): string {
@@ -20,14 +26,6 @@ function decodeFileBuffer(buf: Buffer): string {
     return buf.slice(3).toString('utf-8');
   }
   return buf.toString('utf-8');
-}
-
-interface ExtractedSymbol {
-  name: string;
-  kind: string;
-  startLine: number;
-  endLine: number;
-  signature: string;
 }
 
 interface ImportDep {
@@ -133,31 +131,63 @@ export class IncrementalParser {
 
       const db = getDb();
 
-      // Skip if file content hasn't changed
-      const existing = db
-        .prepare('SELECT hash FROM files WHERE path = ?')
-        .get(filePath) as { hash: string } | undefined;
+      // Determine which parser we will use for this file.
+      // Tree-sitter is used when: PARSER=treesitter AND extension is supported.
+      const useTSParser =
+        isTreeSitterEnabled() && treeSitterExtensions().has(ext);
 
-      if (existing?.hash === hash) {
+      // Skip if file content hasn't changed AND the parser hasn't switched.
+      // When upgrading regex→treesitter, the hash is identical but we must
+      // re-parse to get accurate AST symbols — so check both.
+      const existing = db
+        .prepare('SELECT hash, parser FROM files WHERE path = ?')
+        .get(filePath) as { hash: string; parser: string } | undefined;
+
+      const parserName = useTSParser ? 'treesitter' : 'regex';
+      if (existing?.hash === hash && existing?.parser === parserName) {
         logger.debug({ filePath }, 'Skipped (unchanged)');
         return;
       }
 
-      // Extract symbols using language-specific rules
-      const symbols = this.extractSymbols(content, langDef);
+      // ── Symbol extraction ──────────────────────────────────────────────────
+      // Try tree-sitter first when enabled; fall back to regex on any failure.
+      let symbols: ExtractedSymbol[];
+      let actualParser = 'regex';
 
-      // Upsert file record
+      if (useTSParser) {
+        const tsSymbols = await extractWithTreeSitter(content, ext);
+        if (tsSymbols !== null) {
+          symbols = tsSymbols;
+          actualParser = 'treesitter';
+          logger.debug(
+            { filePath, language: langDef.name, symbolCount: symbols.length },
+            'Parsed file (tree-sitter)'
+          );
+        } else {
+          // WASM unavailable or parse error — fall back to regex silently
+          symbols = this.extractSymbols(content, langDef);
+          logger.debug(
+            { filePath, language: langDef.name, symbolCount: symbols.length },
+            'Parsed file (regex fallback — tree-sitter unavailable)'
+          );
+        }
+      } else {
+        symbols = this.extractSymbols(content, langDef);
+      }
+
+      // Upsert file record — now includes parser column
       db.prepare(`
-        INSERT INTO files (path, language, last_parsed, hash, size_bytes, symbol_count, updated_at)
-        VALUES (?, ?, unixepoch(), ?, ?, ?, unixepoch())
+        INSERT INTO files (path, language, last_parsed, hash, size_bytes, symbol_count, parser, updated_at)
+        VALUES (?, ?, unixepoch(), ?, ?, ?, ?, unixepoch())
         ON CONFLICT(path) DO UPDATE SET
           language     = excluded.language,
           last_parsed  = excluded.last_parsed,
           hash         = excluded.hash,
           size_bytes   = excluded.size_bytes,
           symbol_count = excluded.symbol_count,
+          parser       = excluded.parser,
           updated_at   = excluded.updated_at
-      `).run(filePath, langDef.name, hash, sizeBytes, symbols.length);
+      `).run(filePath, langDef.name, hash, sizeBytes, symbols.length, actualParser);
 
       // Get the file ID (works for both INSERT and UPDATE)
       const fileRow = db
@@ -202,7 +232,7 @@ export class IncrementalParser {
       }
 
       logger.debug(
-        { filePath, language: langDef.name, symbolCount: symbols.length },
+        { filePath, language: langDef.name, symbolCount: symbols.length, parser: actualParser },
         'Parsed file'
       );
     } catch (err) {
