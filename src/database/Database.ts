@@ -82,6 +82,24 @@ function runMigrations(instance: BetterSqlite3.Database): void {
     `);
     instance.exec(`CREATE INDEX IF NOT EXISTS idx_tool_errors_session ON tool_errors(session_id, occurred_at)`);
   } catch { /* already exists */ }
+
+  // forget_log — audit trail for forget() calls
+  try {
+    instance.exec(`
+      CREATE TABLE IF NOT EXISTS forget_log (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        target_type     TEXT    NOT NULL,
+        target_value    TEXT    NOT NULL,
+        reason          TEXT,
+        session_id      TEXT,
+        forgotten_at    INTEGER DEFAULT (unixepoch()),
+        symbols_removed INTEGER DEFAULT 0,
+        files_removed   INTEGER DEFAULT 0
+      )
+    `);
+    instance.exec(`CREATE INDEX IF NOT EXISTS idx_forget_log_time ON forget_log(forgotten_at DESC)`);
+    instance.exec(`CREATE INDEX IF NOT EXISTS idx_forget_log_type ON forget_log(target_type, forgotten_at DESC)`);
+  } catch { /* already exists */ }
 }
 
 /**

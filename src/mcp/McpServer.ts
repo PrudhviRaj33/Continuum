@@ -553,6 +553,95 @@ server.tool(
   }
 );
 
+// ── Tool 18: forget ───────────────────────────────────────────────────────
+// @ts-ignore
+server.tool(
+  'forget',
+  'Permanently remove a file or glob pattern from the index, with an audit log entry. ' +
+  'Use when secrets or generated files were accidentally indexed. ' +
+  'Set dry_run=true to preview how many files/symbols would be removed without deleting. ' +
+  'Files that still exist on disk can be re-added with reindex.',
+  {
+    target:  z.string().describe('Absolute file path or glob pattern (e.g. "**/*.generated.ts")'),
+    type:    z.enum(['file', 'pattern']).describe('"file" to remove a specific file, "pattern" for glob match'),
+    reason:  z.string().optional().describe('Why this is being forgotten (stored in audit log)'),
+    dry_run: z.boolean().optional().default(false).describe('If true, return count only — do not delete'),
+  },
+  async (input) => {
+    const start = Date.now();
+
+    if (input.dry_run) {
+      // Preview mode — count only
+      const db = getDb();
+      let count = 0;
+      if (input.type === 'file') {
+        const row = db.prepare('SELECT COUNT(*) AS n FROM files WHERE path = ?').get(input.target) as { n: number };
+        count = row.n;
+      } else {
+        const { minimatch } = await import('minimatch');
+        const paths = (db.prepare('SELECT path FROM files').all() as { path: string }[])
+          .map(r => r.path)
+          .filter(p => minimatch(p, input.target, { matchBase: true, dot: true }));
+        count = paths.length;
+      }
+      const result = JSON.stringify({ dry_run: true, would_remove_files: count, target: input.target });
+      logToolCall('forget', input, result, Date.now() - start);
+      return { content: [{ type: 'text', text: result }] };
+    }
+
+    const sessionId = session.getSessionId();
+    let outcome: { files: number; symbols: number; matched?: string[] };
+
+    if (input.type === 'file') {
+      outcome = parser.forgetFile(input.target, input.reason, sessionId);
+    } else {
+      outcome = parser.forgetPattern(input.target, input.reason, sessionId);
+    }
+
+    const result = JSON.stringify({
+      forgotten: true,
+      files_removed:   outcome.files,
+      symbols_removed: outcome.symbols,
+      matched_paths:   outcome.matched ?? [input.target],
+      note: outcome.files === 0
+        ? 'File was not in the index (nothing removed)'
+        : 'Use reindex to re-add if file still exists on disk',
+    });
+    logToolCall('forget', input, result, Date.now() - start);
+    return { content: [{ type: 'text', text: result }] };
+  }
+);
+
+// ── Tool 19: get_forget_log ───────────────────────────────────────────────
+server.tool(
+  'get_forget_log',
+  'List everything that has been forgotten from the index — file paths, patterns, reasons, timestamps, and removal counts. ' +
+  'Useful for auditing accidental deletions or verifying cleanup.',
+  {
+    limit: z.number().int().min(1).max(100).optional().default(20).describe('Number of entries to return (newest first)'),
+  },
+  async (input) => {
+    const start = Date.now();
+    const db = getDb();
+
+    const entries = db.prepare(`
+      SELECT id, target_type, target_value, reason, session_id,
+             forgotten_at, symbols_removed, files_removed
+      FROM forget_log
+      ORDER BY forgotten_at DESC
+      LIMIT ?
+    `).all(input.limit) as {
+      id: number; target_type: string; target_value: string;
+      reason: string | null; session_id: string | null;
+      forgotten_at: number; symbols_removed: number; files_removed: number;
+    }[];
+
+    const result = JSON.stringify({ count: entries.length, entries }, null, 2);
+    logToolCall('get_forget_log', input, result, Date.now() - start);
+    return { content: [{ type: 'text', text: result }] };
+  }
+);
+
 // ── Start ──────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {

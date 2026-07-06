@@ -4,6 +4,7 @@ import * as crypto from 'crypto';
 import { getDb, splitCamelCase } from '../database/Database';
 import { getLanguageByExtension, LanguageDefinition } from '../languages/LanguageRegistry';
 import { logger } from '../utils/logger';
+import { minimatch } from 'minimatch';
 import {
   extractWithTreeSitter,
   isTreeSitterEnabled,
@@ -76,6 +77,76 @@ export class IncrementalParser {
     })();
 
     logger.debug({ filePath, symbolsRemoved: orphanedSymbols.length }, 'Removed file from index');
+  }
+
+  /**
+   * Permanently remove a specific file from the index and record it in the
+   * forget_log audit trail. The file can be re-indexed with `reindex` if it
+   * still exists on disk.
+   */
+  forgetFile(
+    filePath: string,
+    reason?: string,
+    sessionId?: string
+  ): { files: number; symbols: number } {
+    const db = getDb();
+
+    // Count symbols before removal for the audit log
+    const file = db
+      .prepare('SELECT id FROM files WHERE path = ?')
+      .get(filePath) as { id: number } | undefined;
+
+    const symbolCount = file
+      ? (db.prepare('SELECT COUNT(*) AS n FROM symbols WHERE file_id = ?').get(file.id) as { n: number }).n
+      : 0;
+    const fileCount = file ? 1 : 0;
+
+    this.removeFile(filePath);
+
+    db.prepare(`
+      INSERT INTO forget_log (target_type, target_value, reason, session_id, symbols_removed, files_removed)
+      VALUES ('file', ?, ?, ?, ?, ?)
+    `).run(filePath, reason ?? null, sessionId ?? null, symbolCount, fileCount);
+
+    logger.info({ filePath, symbolCount, fileCount }, 'Forgot file (audit logged)');
+    return { files: fileCount, symbols: symbolCount };
+  }
+
+  /**
+   * Remove all indexed files matching a glob pattern and record the operation
+   * in forget_log. Uses minimatch for glob matching against stored file paths.
+   *
+   * Example: forgetPattern('**\/*.generated.ts') removes all generated files.
+   * The caller can re-index surviving files via `reindex` at any time.
+   */
+  forgetPattern(
+    glob: string,
+    reason?: string,
+    sessionId?: string
+  ): { files: number; symbols: number; matched: string[] } {
+    const db = getDb();
+
+    const allPaths = (db.prepare('SELECT path FROM files').all() as { path: string }[])
+      .map(r => r.path)
+      .filter(p => minimatch(p, glob, { matchBase: true, dot: true }));
+
+    let totalFiles = 0;
+    let totalSymbols = 0;
+
+    for (const p of allPaths) {
+      const r = this.forgetFile(p, reason, sessionId);
+      totalFiles  += r.files;
+      totalSymbols += r.symbols;
+    }
+
+    // One summary entry for the pattern itself
+    db.prepare(`
+      INSERT INTO forget_log (target_type, target_value, reason, session_id, symbols_removed, files_removed)
+      VALUES ('pattern', ?, ?, ?, ?, ?)
+    `).run(glob, reason ?? null, sessionId ?? null, totalSymbols, totalFiles);
+
+    logger.info({ glob, totalFiles, totalSymbols }, 'Forgot pattern (audit logged)');
+    return { files: totalFiles, symbols: totalSymbols, matched: allPaths };
   }
 
   /**

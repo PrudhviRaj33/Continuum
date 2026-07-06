@@ -133,6 +133,22 @@ CREATE TABLE IF NOT EXISTS tool_errors (
 
 CREATE INDEX IF NOT EXISTS idx_tool_errors_session ON tool_errors(session_id, occurred_at);
 
+-- Audit log of every forget() call — what was removed, why, and by which session
+-- Enables reverse lookup: reindex re-adds files that still exist on disk
+CREATE TABLE IF NOT EXISTS forget_log (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  target_type     TEXT    NOT NULL,   -- 'file' | 'pattern'
+  target_value    TEXT    NOT NULL,   -- path or glob pattern
+  reason          TEXT,               -- optional justification
+  session_id      TEXT,
+  forgotten_at    INTEGER DEFAULT (unixepoch()),
+  symbols_removed INTEGER DEFAULT 0,
+  files_removed   INTEGER DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_forget_log_time ON forget_log(forgotten_at DESC);
+CREATE INDEX IF NOT EXISTS idx_forget_log_type ON forget_log(target_type, forgotten_at DESC);
+
 -- Every MCP tool call logged for observability
 CREATE TABLE IF NOT EXISTS tool_usage (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
