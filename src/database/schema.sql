@@ -38,10 +38,14 @@ CREATE TABLE IF NOT EXISTS symbols (
 -- Self-contained (not contentless): column values must be readable via JOIN
 -- for search ranking to work. A contentless (content='') table cannot be
 -- read outside a MATCH clause, which silently breaks the ranked-search JOIN.
+-- name_tokens: camelCase-split lowercase version of name for substring search
+-- e.g. "getUserById" → "get user by id", so searching "user" finds it.
 CREATE VIRTUAL TABLE IF NOT EXISTS symbols_fts USING fts5(
   name,
+  name_tokens,
   kind,
-  file_path
+  file_path,
+  tokenize = 'unicode61'
 );
 
 -- Relationships between symbols (imports, calls, extends, implements)

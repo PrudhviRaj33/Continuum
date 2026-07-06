@@ -11,7 +11,7 @@ process.env.DB_PATH = TEST_DB_PATH;
 process.env.LOG_LEVEL = 'error';
 
 import { IncrementalParser } from '../src/parser/IncrementalParser';
-import { getDb, closeDb } from '../src/database/Database';
+import { getDb, closeDb, splitCamelCase } from '../src/database/Database';
 
 const parser = new IncrementalParser();
 let tempDir: string;
@@ -96,9 +96,48 @@ describe('Data hygiene — FTS5 ranked search actually returns results', () => {
       JOIN symbols s ON s.name = symbols_fts.name AND s.kind = symbols_fts.kind
       JOIN files f ON f.path = symbols_fts.file_path
       WHERE symbols_fts MATCH ?
-    `).all('findUniqueSymbolXyz') as { name: string }[];
+    `).all('{name name_tokens}: findUniqueSymbolXyz*') as { name: string }[];
 
     expect(rows.length).toBeGreaterThan(0);
     expect(rows[0].name).toBe('findUniqueSymbolXyz');
+  });
+
+  it('camelCase substring search finds symbol via name_tokens ("unique" → "findUniqueSymbolXyz")', async () => {
+    const filePath = path.join(tempDir, 'camel.ts');
+    await fs.writeFile(filePath, 'export function findUniqueSymbolXyz() {}\n', 'utf-8');
+    await parser.parseFile(filePath);
+
+    const db = getDb();
+
+    // name_tokens for "findUniqueSymbolXyz" = "find unique symbol xyz"
+    // so searching "unique" should match via name_tokens column
+    const rows = db.prepare(`
+      SELECT s.name
+      FROM symbols_fts
+      JOIN symbols s ON s.name = symbols_fts.name AND s.kind = symbols_fts.kind
+      JOIN files f ON f.path = symbols_fts.file_path
+      WHERE symbols_fts MATCH ?
+    `).all('{name name_tokens}: unique*') as { name: string }[];
+
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows[0].name).toBe('findUniqueSymbolXyz');
+  });
+});
+
+describe('splitCamelCase — token generation', () => {
+  it('handles camelCase', () => {
+    expect(splitCamelCase('getUserById')).toBe('get user by id');
+  });
+  it('handles PascalCase', () => {
+    expect(splitCamelCase('MyHTTPClient')).toBe('my http client');
+  });
+  it('handles snake_case', () => {
+    expect(splitCamelCase('parse_file')).toBe('parse file');
+  });
+  it('handles plain lowercase', () => {
+    expect(splitCamelCase('render')).toBe('render');
+  });
+  it('handles mixed snake+camel', () => {
+    expect(splitCamelCase('get_UserById')).toBe('get user by id');
   });
 });

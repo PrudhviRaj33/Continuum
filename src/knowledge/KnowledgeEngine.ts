@@ -56,8 +56,11 @@ export class KnowledgeEngine {
       }
     };
 
-    // FTS5 exact/ranked results first
+    // FTS5 exact/ranked results first — search both name (exact) and
+    // name_tokens (camelCase split) so "user" finds "getUserById"
     try {
+      // {name name_tokens}: col-filter syntax — match across both columns
+      const ftsQuery = `{name name_tokens}: ${query}*`;
       const ftsRows = db
         .prepare(`
           SELECT
@@ -76,10 +79,11 @@ export class KnowledgeEngine {
           ORDER BY rank
           LIMIT ?
         `)
-        .all(query, limit) as SymbolSearchResult[];
+        .all(ftsQuery, limit) as SymbolSearchResult[];
       dedup(ftsRows);
     } catch {
-      // FTS5 query may fail on special chars — LIKE below covers it
+      // FTS5 query may fail on special chars or if name_tokens migration is pending
+      // LIKE below always runs as fallback
     }
 
     // Always also run LIKE so camelCase substrings are found.

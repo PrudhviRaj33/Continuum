@@ -1,7 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import { getDb } from '../database/Database';
+import { getDb, splitCamelCase } from '../database/Database';
 import { getLanguageByExtension, LanguageDefinition } from '../languages/LanguageRegistry';
 import { logger } from '../utils/logger';
 import {
@@ -211,7 +211,7 @@ export class IncrementalParser {
         VALUES (?, ?, ?, ?, ?, ?)
       `);
       const insertFts = db.prepare(
-        'INSERT INTO symbols_fts (name, kind, file_path) VALUES (?, ?, ?)'
+        'INSERT INTO symbols_fts (name, name_tokens, kind, file_path) VALUES (?, ?, ?, ?)'
       );
 
       db.transaction(() => {
@@ -222,7 +222,7 @@ export class IncrementalParser {
 
         for (const s of symbols) {
           insertSymbol.run(fileId, s.name, s.kind, s.startLine, s.endLine, s.signature);
-          insertFts.run(s.name, s.kind, filePath);
+          insertFts.run(s.name, splitCamelCase(s.name), s.kind, filePath);
         }
       })();
 

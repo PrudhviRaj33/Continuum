@@ -49,6 +49,7 @@ function runMigrations(instance: BetterSqlite3.Database): void {
   try { instance.exec(`ALTER TABLE files ADD COLUMN parser TEXT DEFAULT 'regex'`); } catch { /* already exists */ }
 
   migrateContentlessFts(instance);
+  migrateFtsAddTokens(instance);
 
   // session_summaries — written by Stop hook on session end
   try {
@@ -121,6 +122,75 @@ function migrateContentlessFts(instance: BetterSqlite3.Database): void {
 
   const count = (instance.prepare('SELECT COUNT(*) AS n FROM symbols_fts').get() as { n: number }).n;
   process.stderr.write(`[Continuum] symbols_fts rebuilt with ${count} entries.\n`);
+}
+
+/**
+ * Split a camelCase / PascalCase / snake_case identifier into lowercase tokens.
+ * Used to populate name_tokens in symbols_fts for substring search.
+ *
+ * Examples:
+ *   getUserById   → "get user by id"
+ *   MyHTTPClient  → "my http client"
+ *   parse_file    → "parse file"
+ *
+ * Exported so IncrementalParser can import it (single source of truth).
+ */
+export function splitCamelCase(name: string): string {
+  return name
+    .replace(/_/g, ' ')                          // snake_case → spaces
+    .replace(/([a-z])([A-Z])/g, '$1 $2')         // camelCase boundary
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')  // HTTPClient → HTTP Client
+    .toLowerCase()
+    .trim();
+}
+
+/**
+ * Add name_tokens column to symbols_fts.
+ *
+ * FTS5 virtual tables do NOT support ALTER TABLE ADD COLUMN, so this must
+ * DROP + recreate + re-populate the entire table. Uses the same safe pattern
+ * as migrateContentlessFts(). Idempotent — skips if already migrated.
+ */
+function migrateFtsAddTokens(instance: BetterSqlite3.Database): void {
+  // Detect if name_tokens already exists by inspecting the stored DDL
+  const existing = instance
+    .prepare("SELECT sql FROM sqlite_master WHERE name = 'symbols_fts' AND type = 'table'")
+    .get() as { sql: string } | undefined;
+
+  if (!existing || existing.sql.includes('name_tokens')) return; // fresh install or already migrated
+
+  process.stderr.write(
+    '[Continuum] Migrating symbols_fts: adding name_tokens for camelCase search...\n'
+  );
+
+  // Snapshot existing rows before DROP
+  const rows = instance
+    .prepare('SELECT name, kind, file_path FROM symbols_fts')
+    .all() as { name: string; kind: string; file_path: string }[];
+
+  instance.exec('DROP TABLE symbols_fts');
+  instance.exec(`
+    CREATE VIRTUAL TABLE symbols_fts USING fts5(
+      name,
+      name_tokens,
+      kind,
+      file_path,
+      tokenize = 'unicode61'
+    )
+  `);
+
+  const insert = instance.prepare(
+    'INSERT INTO symbols_fts (name, name_tokens, kind, file_path) VALUES (?, ?, ?, ?)'
+  );
+  instance.transaction(() => {
+    for (const r of rows) {
+      insert.run(r.name, splitCamelCase(r.name), r.kind, r.file_path);
+    }
+  })();
+
+  process.stderr.write(
+    `[Continuum] symbols_fts rebuilt with name_tokens: ${rows.length} entries.\n`
+  );
 }
 
 function seedMetadata(instance: BetterSqlite3.Database): void {
