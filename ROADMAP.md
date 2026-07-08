@@ -12,6 +12,8 @@ Continuum is a **personal, local developer tool**. Its two moats:
 ## Shipped
 
 ### v1.1 (July 2026)
+- **`forget` tool + audit log** — removes a symbol/file/task from the index on request, writes to `forget_log` (target, reason, session, counts removed) before deleting. 19 MCP tools total (added `forget`, `get_forget_log`).
+- **BM25 camelCase token expansion** — `symbols_fts` gained a `name_tokens` column (`tokenize='unicode61'`); `splitCamelCase()` populates it on every insert so `'user'` finds `getUserById`, `'http'` finds `MyHTTPClient`. Safe DROP+recreate migration (FTS5 has no `ALTER ADD COLUMN`), idempotent, snapshots existing rows first. LIKE fallback unchanged.
 - **Tree-sitter behind a flag** — `PARSER=treesitter` activates WASM-based AST extraction via `web-tree-sitter` (no node-gyp). Regex stays the zero-dep default. Supported: TypeScript/JavaScript, Python, C#, Java, Go. Delivers: no false-positive symbols, exact end lines, real signatures. Per-file `parser` field records which extractor was used; `reindex` upgrades an existing regex index to tree-sitter in one step. Graceful fallback to regex if WASM is unavailable (optional deps not installed).
 - **`continuum init` — one-command installer** — auto-detects project root, writes `.mcp.json` (no `WATCH_PATHS`/`DB_PATH` needed), wires all 5 hooks into `.claude/settings.json` via non-destructive merge, updates `.gitignore`. Idempotent. Replaced the old CLI `init` that wrote deprecated per-`.env` config.
 - **`continuum status`** — read-only CLI: project root + detection marker, DB size/integrity (`PRAGMA integrity_check`), server liveness (pid filtered to this project via `lsof` cwd match), session state, per-language index counts with FTS-drift warning, hook wiring check. `--json` for scripting.
@@ -23,7 +25,7 @@ Continuum is a **personal, local developer tool**. Its two moats:
 - **Stale-data elimination** — `removeFile()` cleans files+symbols+FTS together; `sweepOrphans()` on startup and full reindex purges files deleted while the watcher was offline; ENOENT mid-parse treated as delete
 - **FTS5 ranked search repaired** — `symbols_fts` migrated from contentless (`content=''`, which silently broke the ranked-search JOIN since day one) to self-contained; automatic safe migration on startup
 - **Lazy DB path resolution** — resolved on first use, not import time (fixes env-var ordering under ESM import hoisting)
-- **New MCP tools** (17 total): `smart_search`, `enrich_context`, `list_tables`, `get_project_context`, `get_file_symbols`, `reindex` (reports `orphans_removed`), `get_recent_sessions`
+- **New MCP tools** (19 total): `smart_search`, `enrich_context`, `list_tables`, `get_project_context`, `forget`, `get_forget_log`, `get_file_symbols`, `reindex` (reports `orphans_removed`), `get_recent_sessions`
 - **camelCase search fix** — FTS5 + LIKE results always merged
 - **TS/JS import extraction** into `relationships` (named/default/namespace/multi-line)
 - **JS symbol extraction rewrite** — arrow functions, `module.exports`, generators, getters/setters
@@ -47,14 +49,9 @@ No committed items — all planned work is in the backlog below.
 
 ## Later (under consideration, unordered)
 
-- **BM25 stemming / camelCase token expansion** — index `getUserById` as
-  `get user by id` tokens; requires FTS rebuild. Search works today; this is a
-  quality boost, not a gap.
 - **Vector/semantic search** — opt-in (`EMBEDDING_MODEL=local`,
-  `@xenova/transformers`, all-MiniLM-L6-v2), RRF fusion with FTS+LIKE. Only worth
-  doing after tree-sitter provides clean symbols to embed.
-- **`forget` tool + audit log** — remove accidentally indexed secrets/stale
-  entries with an audit trail.
+  `@xenova/transformers`, all-MiniLM-L6-v2), RRF fusion with FTS+LIKE. Tree-sitter
+  now ships, so clean symbols exist to embed — this is unblocked.
 - **Knowledge-graph expansion** — `graph_nodes` table, 1-hop traversal in
   `find_related_files`. Depends on tree-sitter for accurate edges.
 - **Multi-agent isolation** — `AGENT_ID`/`AGENT_SCOPE` with parameterized
