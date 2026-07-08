@@ -17,11 +17,16 @@ let db: BetterSqlite3.Database | null = null;
  * every time. Computing it inside getDb() guarantees env vars are fully settled first.
  */
 function resolveActiveDbPath(): string {
-  const projectRoot = process.env.PROJECT_ROOT
+  // Precedence must match resolveWatchPaths() exactly, or the DB and the
+  // watcher could disagree on which project root is authoritative:
+  // WATCH_PATHS > CLAUDE_PROJECT_DIR (auto-injected by Claude Code) > PROJECT_ROOT > auto-detect
+  const projectRoot = process.env.WATCH_PATHS
+    ? path.resolve(process.env.WATCH_PATHS.split(',')[0].trim())
+    : process.env.CLAUDE_PROJECT_DIR
+    ? path.resolve(process.env.CLAUDE_PROJECT_DIR)
+    : process.env.PROJECT_ROOT
     ? path.resolve(process.env.PROJECT_ROOT)
-    : (process.env.WATCH_PATHS
-        ? path.resolve(process.env.WATCH_PATHS.split(',')[0].trim())
-        : detectProjectRoot(process.cwd()));
+    : detectProjectRoot(process.cwd());
 
   return resolveDbPath(projectRoot);
 }

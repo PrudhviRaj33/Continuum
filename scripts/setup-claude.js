@@ -67,19 +67,26 @@ function writeJson(file, data) {
 // ─── Build MCP server entries ─────────────────────────────────────────────────
 
 /**
- * Per-project .mcp.json entry — no WATCH_PATHS, cwd = project root.
- * Server auto-detects the project from its working directory.
+ * Per-project .mcp.json entry.
+ *
+ * NOTE: "cwd" is NOT a supported field in Claude Code's .mcp.json schema —
+ * it is silently ignored, so it cannot be relied on to set the server's
+ * working directory. The real mechanism is CLAUDE_PROJECT_DIR, which Claude
+ * Code auto-injects into every stdio server's environment with the correct
+ * project root. We also set PROJECT_ROOT explicitly here as an explicit,
+ * config-visible fallback (covers non-Claude-Code MCP clients and direct
+ * `continuum start` invocations where nothing auto-injects CLAUDE_PROJECT_DIR).
  */
 function buildPerProjectEntry(projectPath) {
   return {
     command: NODE_BIN,
     args: [MCP_SERVER_JS],
-    cwd: projectPath,  // ← this is what makes auto-detection work
     env: {
       LOG_LEVEL: 'info',
       SESSION_RESUME_HOURS: '4',
-      // DB_PATH intentionally omitted — defaults to .continuum/knowledge.db in cwd
-      // WATCH_PATHS intentionally omitted — auto-detected from cwd
+      PROJECT_ROOT: projectPath,
+      // DB_PATH intentionally omitted — defaults to .continuum/knowledge.db under the resolved root
+      // WATCH_PATHS intentionally omitted — resolved from CLAUDE_PROJECT_DIR / PROJECT_ROOT
     }
   };
 }

@@ -59,16 +59,23 @@ export function detectProjectRoot(startDir: string = process.cwd()): string {
 
 /**
  * Determine the watch paths for Continuum:
- * 1. If WATCH_PATHS env var is set → use it (explicit override, backwards compat)
- * 2. If PROJECT_ROOT env var is set → use it
- * 3. Auto-detect: walk up from cwd to find project root
+ * 1. WATCH_PATHS env var → explicit multi-path override (power users)
+ * 2. CLAUDE_PROJECT_DIR → auto-injected by Claude Code into every stdio MCP
+ *    server's environment, always correct regardless of workspace layout,
+ *    multi-root setups, or `--add-dir`. This is the primary zero-config path —
+ *    "cwd" is NOT a supported .mcp.json field, so this is what actually works.
+ * 3. PROJECT_ROOT env var → manual override for non-Claude-Code MCP clients
+ *    or direct `continuum start` invocations outside an editor
+ * 4. Auto-detect: walk up from process.cwd() to find a project root marker
  */
 export function resolveWatchPaths(): string[] {
   if (process.env.WATCH_PATHS) {
     return process.env.WATCH_PATHS.split(',').map(p => p.trim()).filter(Boolean);
   }
 
-  const root = process.env.PROJECT_ROOT
+  const root = process.env.CLAUDE_PROJECT_DIR
+    ? path.resolve(process.env.CLAUDE_PROJECT_DIR)
+    : process.env.PROJECT_ROOT
     ? path.resolve(process.env.PROJECT_ROOT)
     : detectProjectRoot(process.cwd());
 

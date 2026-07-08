@@ -71,22 +71,28 @@ function initCommand(): void {
     : 'directory';
   ok(`Project root: ${projectRoot}  (detected via ${marker})`);
 
-  // 2. Write .mcp.json — per-project entry, no WATCH_PATHS / DB_PATH.
-  //    The server auto-detects both from cwd.
+  // 2. Write .mcp.json — per-project entry.
+  //    NOTE: "cwd" is NOT a supported .mcp.json field in Claude Code — it's
+  //    silently ignored. The real zero-config mechanism is CLAUDE_PROJECT_DIR,
+  //    which Claude Code auto-injects into every stdio server's environment
+  //    with the correct project root regardless of workspace layout. We also
+  //    set PROJECT_ROOT explicitly as a robust fallback for non-Claude-Code
+  //    MCP clients or direct `continuum start` invocations, where nothing
+  //    auto-injects CLAUDE_PROJECT_DIR.
   const mcpFile = path.join(projectRoot, '.mcp.json');
   const mcp = (readJson(mcpFile) ?? {}) as { mcpServers?: Record<string, unknown> };
   if (!mcp.mcpServers) mcp.mcpServers = {};
   mcp.mcpServers['continuum'] = {
     command: process.execPath,
     args: [serverJs],
-    cwd: projectRoot,
     env: {
       LOG_LEVEL: 'info',
       SESSION_RESUME_HOURS: '4',
+      PROJECT_ROOT: projectRoot,
     },
   };
   writeJson(mcpFile, mcp);
-  ok(`.mcp.json written  (server auto-detects root and DB from cwd)`);
+  ok(`.mcp.json written  (root resolved via CLAUDE_PROJECT_DIR, falls back to PROJECT_ROOT)`);
 
   // 3. Wire hooks into .claude/settings.json — non-destructive merge.
   //    We only append our own entries; existing hooks from other tools are kept.

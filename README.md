@@ -86,7 +86,7 @@ Run the setup script once — it writes a `.mcp.json` to each project root autom
 node /path/to/continuum/scripts/setup-claude.js /path/to/your/project
 ```
 
-This creates `.mcp.json` in your project root with `cwd` set to that project. When VS Code opens the project, Claude Code reads this file and spawns Continuum with `cwd = project root`. Continuum then auto-detects the root and starts watching.
+This creates `.mcp.json` in your project root. `"cwd"` is **not** a supported field in Claude Code's `.mcp.json` schema, so Continuum doesn't rely on it. Instead, Claude Code auto-injects `CLAUDE_PROJECT_DIR` into every stdio MCP server's environment with the correct project root, regardless of workspace layout — that's what Continuum reads. `PROJECT_ROOT` is set explicitly in the generated config too, as an equivalent fallback for non-Claude-Code MCP clients or a direct `continuum start`.
 
 **The resulting `.mcp.json` in your project** (written automatically by the setup script):
 ```json
@@ -95,17 +95,17 @@ This creates `.mcp.json` in your project root with `cwd` set to that project. Wh
     "continuum": {
       "command": "/path/to/node",
       "args": ["/path/to/continuum/dist/mcp/McpServer.js"],
-      "cwd": "/your/project/root",
       "env": {
         "LOG_LEVEL": "info",
-        "SESSION_RESUME_HOURS": "4"
+        "SESSION_RESUME_HOURS": "4",
+        "PROJECT_ROOT": "/your/project/root"
       }
     }
   }
 }
 ```
 
-No `WATCH_PATHS`. No `DB_PATH`. Continuum resolves both from `cwd` automatically.
+No `WATCH_PATHS`, no `DB_PATH` to configure. Continuum resolves both — in order — from `CLAUDE_PROJECT_DIR` (Claude Code's own auto-injected variable), then the `PROJECT_ROOT` above, then by walking up from `process.cwd()` looking for a `.git`/`package.json`/etc. marker as a last resort.
 
 **Symbol index location:** `.continuum/knowledge.db` in your project root (auto-gitignored).
 
@@ -239,7 +239,7 @@ MYSQL_PASSWORD=mypassword
 |----------|---------|-------------|
 | Variable | Default | Description |
 |----------|---------|-------------|
-| _(none needed)_ | — | **Zero config by default.** Project root and DB path are auto-detected from `cwd`. |
+| `PROJECT_ROOT` | _(auto)_ | Explicit project root override — set automatically by `continuum init`/`setup-claude.js`. Falls back to Claude Code's own `CLAUDE_PROJECT_DIR`, then to walking up from `process.cwd()` for a marker file. |
 | `WATCH_PATHS` | _(auto)_ | Override auto-detection. Comma-separated absolute paths to watch. |
 | `PROJECT_ROOT` | _(auto)_ | Explicitly set project root (skips git/package.json walk-up). |
 | `DB_PATH` | `<project>/.continuum/knowledge.db` | Override the per-project DB location. |
@@ -276,7 +276,7 @@ docker compose up -d
 
 ## How It Works
 
-1. **Startup**: Continuum reads `cwd` (set by the per-project `.mcp.json`) and walks up the directory tree to find the project root (`.git`, `package.json`, `*.sln`, etc.). It creates or resumes a session in `.continuum/knowledge.db` inside that root.
+1. **Startup**: Continuum resolves its project root from `CLAUDE_PROJECT_DIR` (auto-injected by Claude Code) or `PROJECT_ROOT` (set by `continuum init`), falling back to walking up from `process.cwd()` for a marker file (`.git`, `package.json`, `*.sln`, etc.). It creates or resumes a session in `.continuum/knowledge.db` inside that root.
 2. **Indexing**: Every file change triggers incremental parsing. The file's MD5 hash is checked — unchanged files are skipped. New symbols are extracted and stored in SQLite with FTS5 indexing.
 3. **Session tracking**: Every file change after the initial scan is recorded as a `touched_file` event (debounced to 5 seconds per path). The PostToolUse hook captures edits automatically.
 4. **MCP tools**: Your AI assistant calls tools via stdio. `save_task` checkpoints the current goal and decisions; `get_session` recovers them after compaction.
