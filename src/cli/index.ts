@@ -113,6 +113,18 @@ function initCommand(): void {
     { event: 'SessionStart',       script: 'session-start.js',     timeout: 3000 },
   ];
 
+  // Hooks run as separate process invocations spawned by Claude Code — they do
+  // NOT inherit the MCP server's own env. Without DB_PATH set explicitly here,
+  // every hook falls back to its own hardcoded default (a path relative to
+  // wherever Continuum itself is installed) instead of THIS project's
+  // .continuum/knowledge.db — silently writing every project's session data
+  // into one shared file.
+  //
+  // Deliberately NOT calling resolveDbPath() here: it reads process.env.DB_PATH
+  // from *this* `init` invocation's own shell, which could bake in a leftover
+  // or unrelated value. We want the actual per-project default, unconditionally.
+  const projectDbPath = path.join(projectRoot, '.continuum', 'knowledge.db');
+
   let wired = 0;
   let already = 0;
   for (const { event, script, timeout, matcher } of HOOK_WIRING) {
@@ -121,7 +133,7 @@ function initCommand(): void {
       fail(`hook script missing: ${scriptPath} — skipping ${event}`);
       continue;
     }
-    const cmd = `${JSON.stringify(process.execPath)} ${JSON.stringify(scriptPath)}`;
+    const cmd = `DB_PATH=${JSON.stringify(projectDbPath)} ${JSON.stringify(process.execPath)} ${JSON.stringify(scriptPath)}`;
 
     if (!settings.hooks[event]) settings.hooks[event] = [];
     const groups = settings.hooks[event];

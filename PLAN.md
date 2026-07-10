@@ -1,26 +1,39 @@
-# Continuum — Implementation Plan (v2.0 Backlog)
-### Confidence Score: 81/100
+# Continuum — Implementation Plan (v3.0)
+### Confidence Score: 84/100
 
-> Refined after deep re-read of actual source code (July 2026).
-> 5 gaps were found and fixed in this version vs the original draft.
-> Every risk, file, and schema change is grounded in the real codebase.
+> v2.0 covered Phases 1–6 (BM25, forget, knowledge-graph, semantic search,
+> multi-agent, VS Code extension). Phases 1 and 2 have since **shipped** —
+> see commits `9ef7196` and `d766e1c`. This revision (v3.0) corrects the
+> baseline that had gone stale, reprioritizes ahead of Phases 3–6 with work
+> found during a full architecture review (see `MULTI_WORKSPACE_DESIGN.md`,
+> `PRODUCT_REQUIREMENTS.md`, `TESTING_PLAN.md`), and keeps Phases 3–6 as
+> future work, now renumbered to Phases 8–11.
 
 ---
 
-## Why 81/100 — Honest Breakdown
+## Why 84/100 — Honest Breakdown
 
 | Phase | Confidence | Main Uncertainty |
 |---|---|---|
-| Phase 1 — BM25 / camelCase | 91% | FTS5 multi-column MATCH syntax needs live testing |
-| Phase 2 — `forget` tool | 88% | Pattern matching needs `minimatch` dep or manual glob |
-| Phase 3 — Knowledge graph | 74% | call_expression extraction is complex per-language; `from_id` anchoring needs rethink |
-| Phase 4 — Semantic search | 58% | Memory scaling, WASM coexistence, @xenova size — most unknowns |
-| Phase 5 — Multi-agent | 93% | Trivial scoping, well-understood pattern |
-| Phase 6 — VS Code | 78% | VS Code API surface is straightforward, Marketplace publish is new |
+| Phase 0 — Deployment gap | 99% | Zero engineering risk — it's an action, not code |
+| Phase 1 — BM25 / camelCase | ✅ Shipped | — |
+| Phase 2 — `forget` tool | ✅ Shipped | — |
+| Phase 3 — Branch-scoped sessions | 95% | One column, one migration, one query predicate |
+| Phase 4 — Token-efficiency benchmark | 85% | Harness design is clear; result quality depends on picking realistic tasks |
+| Phase 5 — Process lifecycle + build reliability | 88% | Pidfile pattern is well-understood; build OOM root cause needs confirming |
+| Phase 6 — Testing plan execution | 90% | Mostly execution of already-designed tests, not new design |
+| Phase 7 — Multi-repo connection manager + fan-out | 70% | Largest, most novel piece; several dependent sub-systems |
+| Phase 8 — Knowledge graph (call edges) | 74% | Unchanged from v2.0 — `call_expression` extraction per-language, `from_id` anchoring |
+| Phase 9 — Semantic search | 58% | Unchanged from v2.0 — WASM coexistence, memory scaling |
+| Phase 10 — Multi-agent isolation | 93% | Unchanged from v2.0 — trivial, low priority |
+| Phase 11 — Multi-client installer | 80% | Config format research needed per tool (Cursor, Copilot, Windsurf) |
+| Phase 12 — VS Code extension | 78% | Unchanged from v2.0 — build only if requested |
 
-**Overall weighted: 81/100.**
-The foundation (SQLite, parser, MCP tools) is very solid — that's what keeps it above 80.
-Phase 4 is the honest wildcard that pulls it below 90.
+**Overall weighted: 84/100.** Higher than v2.0's 81 because the two riskiest
+original phases (BM25, forget) are now done-and-verified rather than
+projected, and the new near-term phases (0, 3, 4, 5, 6) are low-risk,
+well-understood work. Phase 7 (multi-repo) is the new honest wildcard —
+it's the largest, least-precedented piece in this entire plan.
 
 ---
 
@@ -34,15 +47,17 @@ Phase 4 is the honest wildcard that pulls it below 90.
 
 ---
 
-## Current State (Baseline)
+## Current State (Baseline — corrected, was stale)
 
 ```
-Tests:    81/81 passing
-Build:    tsc clean, 0 errors
-Tools:    17 MCP tools
-DB:       12 tables, SQLite WAL, FTS5 self-contained
+Tests:    94/94 passing
+Build:    tsc clean, 0 errors (intermittent OOM on this machine — see Phase 5)
+Tools:    19 MCP tools
+DB:       14 tables, SQLite WAL, FTS5 self-contained, name_tokens, forget_log
 Parser:   regex (default) + tree-sitter (PARSER=treesitter, 6 languages)
-Commit:   64183ac
+Commit:   a9ffb5d + 2 uncommitted fixes in working tree (hook DB_PATH routing, README rewrite)
+Deployed: NOT wired to real projects — reviewer's own 3 production repos still on
+          old global config, zero hooks ever fired across 8 real sessions
 ```
 
 ---
@@ -50,18 +65,25 @@ Commit:   64183ac
 ## Priority & Dependency Map
 
 ```
-Phase 1: BM25 / camelCase token expansion   ← independent, ~1 day
-Phase 2: forget tool + audit log            ← independent, ~1 day
-Phase 3: Knowledge-graph (call edges)       ← needs tree-sitter ✅, ~3 days
-Phase 4: Vector / semantic search           ← needs tree-sitter ✅ + Phase 1, ~1 week
-Phase 5: Multi-agent isolation              ← independent, low priority, ~0.5 days
-Phase 6: VS Code extension                  ← independent, build last, ~3 days
+Phase 0:  Close the deployment gap                ← independent, zero code, ~1 hour — do this FIRST
+Phase 1:  BM25 / camelCase token expansion         ← ✅ SHIPPED
+Phase 2:  forget tool + audit log                  ← ✅ SHIPPED
+Phase 3:  Branch-scoped sessions                   ← independent, ~1 day
+Phase 4:  Token-efficiency benchmark               ← needs Phase 0 (real data to measure), ~1 day
+Phase 5:  Process lifecycle + build reliability     ← independent, ~1-2 days
+Phase 6:  Testing plan execution                   ← needs Phase 0 + 3-5 for full data, ~3 days
+Phase 7:  Multi-repo connection manager + fan-out   ← independent, largest piece, ~9-13 days
+Phase 8:  Knowledge-graph (call edges)              ← needs tree-sitter ✅, ~3 days
+Phase 9:  Vector / semantic search                  ← needs tree-sitter ✅ + Phase 1 ✅, ~1 week
+Phase 10: Multi-agent isolation                     ← independent, low priority, ~0.5 days
+Phase 11: Multi-client installer                    ← independent, ~2-3 days
+Phase 12: VS Code extension                         ← independent, build last/if requested, ~3 days
 ```
 
 ---
 
 ## Phase 1 — BM25 Stemming + camelCase Token Expansion
-**Confidence: 91/100**
+**✅ SHIPPED — commit `9ef7196`. Kept below as historical reference and for the "what not to rebuild" list.**
 
 ### What It Does
 `getUserById` is one opaque FTS5 token. Searching `user` won't find it.
@@ -165,7 +187,7 @@ WHERE symbols_fts MATCH ?
 ---
 
 ## Phase 2 — `forget` Tool + Audit Log
-**Confidence: 88/100**
+**✅ SHIPPED — commit `d766e1c`. Kept below as historical reference.**
 
 ### What It Does
 Removes a file, symbol, or glob pattern from the index permanently.
@@ -275,7 +297,215 @@ const forgotten = new Set<string>(
 
 ---
 
-## Phase 3 — Knowledge-Graph Expansion
+## Phase 0 — Close the Deployment Gap
+**Confidence: 99/100**
+
+### What It Does
+Nothing in this plan can be honestly measured (Phase 6) until Continuum is
+actually running against real, daily-use projects. Right now it isn't: the
+reviewer's own 3 production repos (WebAPI, WebAPP, Databaseapp) are still on
+the pre-hooks global config, and across 8 real sessions, zero hooks have ever
+fired. This is an action, not a build task, and it has to happen before Phase
+4 and Phase 6 can produce real numbers instead of estimates.
+
+### Steps
+1. Commit the two changes currently sitting in the working tree: the hook
+   `DB_PATH` routing fix (`src/cli/index.ts`) and the README rewrite.
+2. Run `continuum init` inside each of the 3 real projects.
+3. Confirm via `continuum status` in each that all 5 hooks show wired and the
+   project root is correctly detected.
+4. Remove (or leave inert — project-level `.mcp.json` takes precedence
+   regardless) the old `WATCH_PATHS`-based entry in `~/.claude.json`.
+
+### Tests to Write
+None — this is a deployment step, not new code. Verification is `continuum
+status` reporting `5/5 wired` on each real project, confirmed by hand.
+
+---
+
+## Phase 3 — Branch-Scoped Sessions
+**Confidence: 95/100**
+
+### What It Does
+Today, `sessions` has no concept of git branch. Working on two different
+efforts in the same repo (a feature branch yesterday, a hotfix on `main`
+today) shares one undifferentiated task history — a real, confirmed gap
+(Case 9 in `MULTI_WORKSPACE_DESIGN.md`). The fix is narrow: the code/symbol
+index stays branch-agnostic (correct, since hash-based reparsing already
+keeps it current); only session memory needs to know which branch it belongs to.
+
+### Files to Change
+
+#### `src/database/schema.sql`
+```sql
+ALTER TABLE sessions ADD COLUMN branch TEXT DEFAULT 'default';
+```
+
+#### `src/database/Database.ts` — `runMigrations()`
+```typescript
+try { instance.exec(`ALTER TABLE sessions ADD COLUMN branch TEXT DEFAULT 'default'`); } catch { /* already exists */ }
+```
+
+#### `src/session/SessionEngine.ts`
+```typescript
+import { execSync } from 'child_process';
+
+function detectBranch(projectRoot: string): string {
+  try {
+    return execSync('git rev-parse --abbrev-ref HEAD', { cwd: projectRoot, encoding: 'utf-8' }).trim() || 'default';
+  } catch {
+    return 'default'; // not a git repo, or detached HEAD
+  }
+}
+```
+Use in `initSession()`'s resume query:
+```sql
+SELECT id FROM sessions WHERE updated_at > ? AND branch = ? ORDER BY updated_at DESC LIMIT 1
+```
+`tasks` and `touched_files` need no schema change — both are already
+foreign-keyed to `session_id`, so branch scoping is inherited automatically.
+
+### Tests to Write
+- `detectBranch()` returns the correct branch name in a real git repo
+- `detectBranch()` returns `'default'` for a non-git directory
+- Session resume only matches sessions on the same branch
+- Switching branches mid-session-window starts a fresh, correctly-scoped session
+- Non-git projects behave exactly as before (no regression)
+
+---
+
+## Phase 4 — Token-Efficiency Benchmark
+**Confidence: 85/100**
+
+### What It Does
+Builds the actual measurement described in `TESTING_PLAN.md` §2.3. This
+project has already shipped one fabricated token-savings metric before
+(caught and replaced with `total_tokens_returned`, a real sum). This phase
+exists so the next efficiency claim is measured, not argued.
+
+### Approach
+1. Define 8–10 fixed representative tasks (e.g. "find where auth is handled,"
+   "what does this file depend on," "resume this session after a compaction").
+2. Run each task twice against a real project (unlocked by Phase 0 — needs
+   actual usage history to be meaningful): once with only ordinary
+   file-reading tools available, once with Continuum's tools available.
+3. Record real token counts from the model API's own usage reporting for
+   each run.
+4. Report the distribution (min/median/max), not a single cherry-picked number.
+
+### Files to Change
+No product code — this is a benchmark harness and a results document
+(`benchmark/TOKEN_EFFICIENCY.md`, following the same pattern as agentmemory's
+own `benchmark/` folder, referenced in `TESTING_PLAN.md`).
+
+### Tests to Write
+None in the traditional sense — the "test" is the benchmark run itself
+producing a reproducible, re-runnable result with its methodology disclosed
+alongside the number.
+
+---
+
+## Phase 5 — Process Lifecycle + Build Reliability
+**Confidence: 88/100**
+
+### What It Does
+Two small, independent hardening fixes surfaced during review:
+1. **Orphaned server processes** — 7 were found running simultaneously on
+   the reviewer's own machine from past editor sessions, with no lock file or
+   lifecycle check to prevent or clean this up.
+2. **Build fragility** — `npm run build` intermittently exhausts its
+   configured 4GB heap even on a capable machine; workarounds this session
+   used `--skipLibCheck` and/or a larger heap successfully.
+
+### Files to Change
+
+#### `src/mcp/McpServer.ts` — startup
+```typescript
+// Write a pidfile keyed to the resolved project root; if a live process
+// already holds it, log and continue without starting a second FileWatcher
+// against the same root (still safe today per WAL, just wasteful).
+```
+
+#### `package.json` — build script
+```json
+"build": "NODE_OPTIONS=--max-old-space-size=8192 tsc --skipLibCheck && mkdir -p dist/database && cp src/database/schema.sql dist/database/"
+```
+Confirm `skipLibCheck` doesn't hide a real type error before adopting it
+permanently — run a clean `tsc --noEmit` (no skipLibCheck) at least once
+after this change to confirm nothing is being silently masked.
+
+### Tests to Write
+- Starting a second server against an already-running root's pidfile is
+  detected (doesn't need to block it — today's dual-process behavior is safe,
+  just wasteful — but it must be visible in `continuum status`)
+- `npm run build` completes without OOM on a clean checkout, measured heap ceiling documented
+
+---
+
+## Phase 6 — Execute the Testing Plan
+**Confidence: 90/100**
+
+### What It Does
+`TESTING_PLAN.md` is a design, not a result. This phase runs it for real,
+against real data unlocked by Phase 0:
+- Regression tests for every bug found this review cycle (§1.2 in the testing plan)
+- The isolation test (§1.3) — two separate projects, assert zero cross-leakage
+- Coverage push on `FileWatcher.ts`, `cli/index.ts`, `ContextGenerator.ts` to ≥70%
+- Recall@5/@10/MRR measurement (§2.1) against the real production symbol index
+- p50/p95 latency pulled from real `tool_usage.duration_ms` (§2.2)
+- Stale-data correctness metric (§2.5) — controlled deletion batch, measure orphan count
+
+### Files to Change
+Primarily `tests/` — new regression test files per bug, plus a
+`benchmark/` folder for the recall/latency/token results, matching the
+structure `TESTING_PLAN.md` references from agentmemory's own repo.
+
+### Tests to Write
+Covered above — this phase *is* the test-writing phase.
+
+---
+
+## Phase 7 — Multi-Repo Connection Manager + Fan-Out
+**Confidence: 70/100 — the largest, least-precedented phase in this plan**
+
+### What It Does
+Implements the design in `MULTI_WORKSPACE_DESIGN.md` in full: live workspace
+discovery via the MCP `roots` protocol (confirmed available in the installed
+SDK, zero lines currently call it), a connection manager tracking which
+per-repo databases are "in view," dynamic `FileWatcher` path add/remove, and
+fan-out versions of `search_symbols`/`smart_search`/`get_session` that query
+every open connection and tag results by repo of origin.
+
+### Sub-phases (each independently testable, per the design doc's own build order)
+1. Per-repo connection manager (`forEachOpenRepo`, `searchAcross` helpers) — ~2-3 days
+2. Roots discovery wired to the connection manager, containment check for nested roots — ~1-2 days
+3. `FileWatcher` dynamic add/remove of watch paths — ~1 day
+4. Fan-out `search_symbols`/`smart_search`/`get_session` — ~3-4 days
+5. Cross-cutting `save_task` duplication across open repos — ~0.5 day
+6. Hardening pass: WAL checkpoint interval, parse-queue cap, per-connection cache sizing — ~1-2 days
+
+### Why confidence is lower here than everywhere else in this plan
+This is genuinely new architecture, not an extension of an existing pattern
+(unlike Phases 1–6, which all follow patterns already proven in this
+codebase). The MCP `roots` protocol has never been exercised against this
+server. Real-world testing against actual multi-root workspace behavior in
+Claude Code is required before this can be called done — a design document
+and an SDK capability check are not the same as verified behavior.
+
+### Files to Change
+Full detail already lives in `MULTI_WORKSPACE_DESIGN.md` — this entry exists
+to place it in the sequenced plan, not duplicate its content.
+
+### Tests to Write
+- Two repos open simultaneously: search returns results from both, tagged correctly
+- A third repo added mid-session (simulated `roots/list_changed`) is picked up without restart
+- A repo removed mid-session stops appearing in fan-out results, its DB file untouched on disk
+- Nested roots (a monorepo + one of its own subpackages) don't double-index
+- A repo opened solo, then as part of a group, resolves to the *same* database both times (no fragmentation)
+
+---
+
+## Phase 8 — Knowledge-Graph Expansion
 **Confidence: 74/100**
 
 ### What It Does
@@ -394,7 +624,7 @@ server.tool('get_graph', ..., {
 
 ---
 
-## Phase 4 — Vector / Semantic Search
+## Phase 9 — Vector / Semantic Search
 **Confidence: 58/100**
 
 ### What It Does
@@ -481,7 +711,7 @@ async semanticSearch(query: string, limit = 20): Promise<SymbolSearchResult[]> {
 | RRF k-parameter needs tuning | Start with k=60 (standard default), expose as env var |
 | Stale embeddings after reindex | CASCADE delete on symbols(id) handles this automatically |
 
-> ⚠️ **Do not start this phase until Phases 1–3 are running on a real project.**
+> ⚠️ **Do not start this phase until Phases 1, 2, and 8 are running on a real project.**
 > Validate symbol quality first. Bad input → bad embeddings → bad search.
 
 ### Tests to Write
@@ -493,7 +723,7 @@ async semanticSearch(query: string, limit = 20): Promise<SymbolSearchResult[]> {
 
 ---
 
-## Phase 5 — Multi-Agent Isolation
+## Phase 10 — Multi-Agent Isolation
 **Confidence: 93/100**
 
 ### What It Does
@@ -524,7 +754,39 @@ try { instance.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_agent ON sessions(a
 
 ---
 
-## Phase 6 — VS Code Extension
+## Phase 11 — Multi-Client Installer
+**Confidence: 80/100**
+
+### What It Does
+`continuum init` today only writes Claude Code's config format
+(`.mcp.json` + `.claude/settings.json`). Cursor, Copilot CLI, and Windsurf
+each expect the MCP server registered in a different file/format, and there's
+no `continuum connect <tool>` equivalent — a real gap versus the nearest
+comparable project, which ships exactly this kind of per-tool installer.
+
+### Approach
+1. Research each target tool's actual config format (Cursor: `~/.cursor/mcp.json`
+   or project-level `.cursor/mcp.json`; Copilot CLI: `~/.copilot/mcp-config.json`;
+   Windsurf: similar `mcpServers` block in its own config path).
+2. Add a `connect` command to `src/cli/index.ts`: `continuum connect cursor`,
+   `continuum connect copilot`, etc., each writing the correct format with the
+   same `PROJECT_ROOT`-based resolution already used for Claude Code.
+3. Document plainly, per client, that the hook-driven zero-cooperation
+   capture layer is Claude-Code-specific — other clients get the MCP tools
+   but not automatic hooks, since none of them have an equivalent event system.
+
+### Files to Change
+`src/cli/index.ts` — new `connect` subcommand, one handler function per
+supported tool, sharing the existing `detectProjectRoot()`/`resolveDbPath()` logic.
+
+### Tests to Write
+- `continuum connect cursor` writes valid JSON in Cursor's expected format and location
+- Running it twice is idempotent, same pattern as `init`
+- Existing unrelated entries in each tool's config file are preserved (non-destructive merge, matching `init`'s existing behavior)
+
+---
+
+## Phase 12 — VS Code Extension
 **Confidence: 78/100**
 
 ### Architecture (thin wrapper, no shared code)
@@ -558,13 +820,33 @@ The CLI approach is sufficient for power users.
 ## Build Order + Commit Convention
 
 ```
-Sprint 1:   Phase 1 — BM25 token expansion         ~1 day
-Sprint 2:   Phase 2 — forget + audit log            ~1 day
-Sprint 3:   Phase 3 — knowledge graph               ~3 days
-Sprint 4:   Phase 4 — semantic search               ~1 week
-Sprint 5:   Phase 5 — multi-agent (when needed)     ~0.5 days
-Sprint 6:   Phase 6 — VS Code (when requested)      ~3 days
+                                                            Effort      Elapsed
+Sprint 1:   Phase 1 — BM25 token expansion                 ~1 day      ✅ SHIPPED
+Sprint 2:   Phase 2 — forget + audit log                   ~1 day      ✅ SHIPPED
+-------------------------------------------------------------------------------
+Sprint 3:   Phase 0 — Close the deployment gap             ~1 hour     Day 1
+Sprint 4:   Phase 3 — Branch-scoped sessions                ~1 day      Day 1-2
+Sprint 5:   Phase 4 — Token-efficiency benchmark            ~1 day      Day 2-3
+Sprint 6:   Phase 5 — Process lifecycle + build reliability ~1-2 days   Day 3-5
+Sprint 7:   Phase 6 — Execute the testing plan              ~3 days     Day 5-8
+-------------------------------------------------------------------------------
+Sprint 8:   Phase 7 — Multi-repo connection manager         ~9-13 days  Day 8-21
+            + fan-out (largest single phase)
+-------------------------------------------------------------------------------
+Sprint 9:   Phase 11 — Multi-client installer               ~2-3 days   Day 21-24
+Sprint 10:  Phase 8 — Knowledge graph                       ~3 days     Day 24-27
+Sprint 11:  Phase 9 — Semantic search                       ~1 week     Day 27-34
+Sprint 12:  Phase 10 — Multi-agent (when needed)            ~0.5 days   as needed
+Sprint 13:  Phase 12 — VS Code (when requested)             ~3 days     as needed
 ```
+
+**Total to close everything currently planned: ~24 working days (~5 weeks)**
+from Phase 0 through Phase 9, not counting Phases 10/12 which are explicitly
+gated on "when needed"/"when requested" rather than scheduled.
+
+**If only closing the near-term gaps that unlock honest measurement** (Phases
+0, 3, 4, 5, 6 — everything through the testing plan execution, before the
+large multi-repo phase): **~8-9 working days, under 2 weeks.**
 
 Commit format per phase:
 ```
@@ -581,9 +863,9 @@ feat(phase-N): <description>
 ## Pre-Build Checklist (Must Pass Before Starting Each Phase)
 
 ```bash
-npx vitest run       # 81/81 ✅
-npx tsc --noEmit     # 0 errors ✅
-git status --short   # clean ✅
+npx vitest run       # 94/94 ✅
+npx tsc --noEmit     # 0 errors ✅ (use --skipLibCheck if it OOMs — see Phase 5)
+git status --short   # clean — commit Phase 0's pending fixes before starting anything else
 git log --oneline -1 # confirm you're on latest commit
 ```
 
@@ -601,9 +883,11 @@ git log --oneline -1 # confirm you're on latest commit
 | Per-file `parser` column + migration | `schema.sql` + `Database.ts` |
 | camelCase FTS + LIKE merged search | `KnowledgeEngine.ts:searchSymbols()` |
 | Session resume, task GC, 5 hooks | `SessionEngine.ts` |
-| splitCamelCase logic foundation | Already used in FTS search — Phase 1 formalises it |
+| splitCamelCase logic foundation | Already used in FTS search — Phase 1 formalised it |
+| BM25 `name_tokens` + `forget_log` (Phases 1-2) | `schema.sql`, `KnowledgeEngine.ts`, `IncrementalParser.ts:forgetFile/forgetPattern` |
+| Project root resolution via `CLAUDE_PROJECT_DIR`/`PROJECT_ROOT` | `src/utils/projectRoot.ts` — do not reintroduce a `.mcp.json` `"cwd"` field, it is not a supported Claude Code config field |
 
 ---
 
-*Last refined: July 2026 — baseline commit 64183ac, 81/81 tests passing*
-*Confidence: 81/100 — Phase 4 semantic search is the primary uncertainty*
+*Last refined: July 2026 — baseline commit `a9ffb5d`, 94/94 tests passing*
+*Confidence: 84/100 — Phase 7 (multi-repo connection manager) is the primary uncertainty*
